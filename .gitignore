@@ -1,10 +1,23 @@
+# Dependencies
 node_modules/
+
+# Build
 build/
 dist/
+
+# Environment / secrets
 .env
 .firebase/
+*.local
+*.key
+*.json
+
+# Logs
 *.log
 firebase-debug.log
 firestore-debug.log
 pglite-debug.log
+
+# System files
 .DS_Store
+Thumbs.db
