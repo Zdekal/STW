@@ -1,0 +1,25 @@
+{
+  "settingsTitle": "Configuración",
+  "languageAndDisplay": "Idioma y Visualización",
+  "preferredLanguage": "Idioma preferido de la aplicación:",
+  "accountInfo": "Información de la cuenta",
+  "dataManagement": "Gestión de datos",
+  "riskMeasureMapping": "Mapeo de Riesgos y Medidas",
+  "riskMeasureMappingSecondary": "Gestión central de vínculos entre amenazas y medidas de seguridad",
+
+  "myMeasureLibrary": "Mi Biblioteca de Medidas",
+  "adminMode": "Modo Administrador",
+  "resetLibrary": "Restablecer Biblioteca",
+  "globalLibraryAdmin": "Biblioteca Global (Plantilla)",
+  
+  "loginTitle": "Iniciar sesión",
+  "loginButton": "Iniciar sesión",
+  "loginGoogle": "Iniciar sesión con Google",
+  "forgotPassword": "¿Olvidaste tu contraseña?",
+  "noAccount": "¿No tienes una cuenta? Regístrate",
+
+  "projects": "Proyectos",
+  "settings": "Configuración",
+  "help": "Ayuda",
+  "logout": "Cerrar sesión"
+}

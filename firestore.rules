@@ -1,0 +1,47 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- RULES FOR USERS ---
+    match /users/{userId} {
+      allow write: if request.auth != null && request.auth.uid == userId;
+      allow read: if request.auth != null;
+    }
+
+    // --- RULES FOR PROJECTS AND THEIR SUBCOLLECTIONS ---
+    match /projects/{projectId} {
+      allow read, update: if request.auth != null && request.auth.uid in resource.data.members;
+      allow create: if request.auth != null;
+      allow delete: if request.auth != null && request.auth.uid == resource.data.ownerId;
+      
+      match /buildings/{buildingId} {
+        allow read, write: if request.auth != null && 
+          request.auth.uid in get(/databases/$(database)/documents/projects/$(projectId)).data.members;
+
+        match /{document=**} {
+          allow read, write: if request.auth != null && 
+            request.auth.uid in get(/databases/$(database)/documents/projects/$(projectId)).data.members;
+        }
+      }
+    }
+
+    // --- RULES FOR GLOBAL LIBRARIES (TEMPLATES) ---
+    match /measures_library/{measureId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.token.admin == true;
+    }
+
+    match /object_threats_library/{libraryId} {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null && request.auth.token.admin == true;
+    }
+
+    // --- RULES FOR REGISTRATIONS ---
+    match /registrationRequests/{requestId} {
+      allow create: if true;
+      allow read, update: if request.auth != null && request.auth.token.admin == true;
+      allow delete: if false;
+    }
+  }
+}
