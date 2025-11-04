@@ -20,4 +20,13 @@ pglite-debug.log
 
 # System files
 .DS_Store
-Thumbs.db
+Thumbs.dbnode_modules/
+build/
+dist/
+.env
+.firebase/
+*.log
+firebase-debug.log
+firestore-debug.log
+pglite-debug.log
+.DS_Store

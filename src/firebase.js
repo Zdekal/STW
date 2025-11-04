@@ -1,58 +1,69 @@
-// Jediný zdroj pravdy pro Firebase v appce (modular SDK)
-import { initializeApp } from "firebase/app";
+// src/firebase.js
+// Jediný zdroj pravdy pro Firebase inicializaci v celé appce.
+
+import { initializeApp, getApps, getApp } from "firebase/app";
 import {
   getAuth,
-  connectAuthEmulator
+  browserLocalPersistence,
+  setPersistence,
+  connectAuthEmulator,
 } from "firebase/auth";
-import {
-  getFirestore,
-  connectFirestoreEmulator
-} from "firebase/firestore";
-import {
-  getFunctions,
-  connectFunctionsEmulator
-} from "firebase/functions";
-import {
-  getStorage,
-  connectStorageEmulator
-} from "firebase/storage";
+import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
+import { getStorage, connectStorageEmulator } from "firebase/storage";
 
-// Konfigurace z .env (v CRA musí mít prefix REACT_APP_)
+// --- Načtení configu z .env ---
 const firebaseConfig = {
-  apiKey:            process.env.REACT_APP_FIREBASE_API_KEY,
-  authDomain:        process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
-  projectId:         process.env.REACT_APP_FIREBASE_PROJECT_ID,
-  storageBucket:     process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
-  appId:             process.env.REACT_APP_FIREBASE_APP_ID
+  appId: process.env.REACT_APP_FIREBASE_APP_ID,
 };
 
-// Inicializace
-export const app = initializeApp(firebaseConfig);
-
-// Služby
-export const auth = getAuth(app);
-export const db = getFirestore(app);
-// Functions region nechávám default (us-central1), stejný používá emulator.
-// Pokud nasazuješ do EU regionu, změň zde (např. "europe-west1").
-export const fns = getFunctions(app /*, "us-central1"*/);
-export const storage = getStorage(app);
-
-// Emulátory – zapni proměnnou REACT_APP_USE_EMULATORS=1 (např. ve start skriptu)
-const usingEmulators =
-  (process.env.REACT_APP_USE_EMULATORS === "1") ||
-  (typeof window !== "undefined" && window.location.hostname === "localhost");
-
-if (usingEmulators) {
-  // Auth
-  connectAuthEmulator(auth, "http://localhost:9099", { disableWarnings: true });
-  // Firestore
-  connectFirestoreEmulator(db, "localhost", 8080);
-  // Functions
-  connectFunctionsEmulator(fns, "localhost", 5001);
-  // Storage
-  connectStorageEmulator(storage, "localhost", 9199);
+// --- Bezpečná kontrola env v devu (pomáhá chytit překlep v .env) ---
+if (
+  process.env.NODE_ENV !== "production" &&
+  Object.values(firebaseConfig).some((v) => !v)
+) {
+  // V dev režimu vyhoď jasnou chybu, ať víš, co chybí.
+  // (V produkci to necháme být, třeba načítáš runtime proměnné jinak.)
+  throw new Error(
+    `[firebase] Chybí některé REACT_APP_FIREBASE_* proměnné v .env.
+Zkontroluj:
+  REACT_APP_FIREBASE_API_KEY
+  REACT_APP_FIREBASE_AUTH_DOMAIN
+  REACT_APP_FIREBASE_PROJECT_ID
+  REACT_APP_FIREBASE_STORAGE_BUCKET
+  REACT_APP_FIREBASE_MESSAGING_SENDER_ID
+  REACT_APP_FIREBASE_APP_ID`
+  );
 }
 
-// Volitelné: jazykové nastavení pro Auth (e-maily apod.)
-// auth.useDeviceLanguage();
+// --- Singleton inicializace (zabrání 'already exists' chybám) ---
+export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+
+// --- Služby ---
+export const auth = getAuth(app);
+export const db = getFirestore(app);
+export const storage = getStorage(app);
+
+// Perzistence (zůstaneš přihlášený po reloadu)
+setPersistence(auth, browserLocalPersistence).catch(() => {
+  /* ignore, fallback default */
+});
+
+// --- Emulátory (zapni přes REACT_APP_USE_EMULATORS=true) ---
+const useEmu = String(process.env.REACT_APP_USE_EMULATORS).toLowerCase() === "true";
+if (useEmu) {
+  // Pozn.: použij 127.0.0.1 místo "localhost", ať máš méně CORS/hSTS problémů.
+  try {
+    connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
+  } catch {}
+  try {
+    connectFirestoreEmulator(db, "127.0.0.1", 8080);
+  } catch {}
+  try {
+    connectStorageEmulator(storage, "127.0.0.1", 9199);
+  } catch {}
+}

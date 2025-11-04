@@ -2,29 +2,19 @@
   "functions": {
     "source": "functions",
     "runtime": "nodejs20",
-    "ignore": [
-      "node_modules",
-      ".git",
-      "firebase-debug.log"
-    ]
+    "ignore": ["node_modules", ".git", "firebase-debug.log"]
   },
   "firestore": {
-    "rules": "firestore.rules"
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
   },
   "storage": {
     "rules": "storage.rules"
   },
   "hosting": {
-    "cors": "cors.json",
     "public": "build",
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**"
-    ],
-    "rewrites": [
-      { "source": "**", "destination": "/index.html" }
-    ],
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [{ "source": "**", "destination": "/index.html" }],
     "headers": [
       {
         "source": "**/*.{js,css,png,jpg,jpeg,gif,svg,webp,ico,woff,woff2}",
@@ -35,11 +25,12 @@
     ]
   },
   "emulators": {
-    "auth":     { "port": 9099 },
-    "firestore":{ "port": 8080 },
-    "functions":{ "port": 5001 },
-    "storage":  { "port": 9199 },
-    "ui":       { "enabled": true },
+    "auth": { "port": 9099 },
+    "firestore": { "port": 8080 },
+    "functions": { "port": 5001 },
+    "storage": { "port": 9199 },
+    "hosting": { "port": 5000 },
+    "ui": { "enabled": true, "port": 4000 },
     "singleProjectMode": true
   }
 }

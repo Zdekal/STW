@@ -12,7 +12,6 @@ import CampusObjectLayout from './object/CampusObjectLayout';
 
 // --- Komponenty pro "Akce" ---
 import ProjectBasic from './project/ProjectBasic.jsx';
-import ProjectRisks from './project/ProjectRisks';
 import ProjectMeasures from './project/ProjectMeasures';
 import ProjectChecklistWrapper from './project/ProjectChecklistWrapper.jsx';
 import PlanDocumentA4 from './project/PlanDocumentA4';
@@ -22,6 +21,10 @@ import ProjectTeam from './project/ProjectTeam';
 import ProjectProcedures from './project/ProjectProcedures';
 import ProjectCommunication from './project/ProjectCommunication';
 import SpravaProjektu from './project/SpravaProjektu';
+
+// správně (o JEDNU úroveň nahoru)
+import { scoreRisk, toBand, makeMatrix, DEFAULT_SCALE, DEFAULT_BANDS } from "lib/risks";
+import ProjectRisks from "lib/risks/ProjectRisks";
 
 
 // --- Komponenty pro "Objekt" a "Kampus" ---

@@ -11,6 +11,8 @@
     "shell": "firebase functions:shell",
     "deploy": "firebase deploy --only functions",
     "lint": "eslint . || true",
+    "seed:measures": "node scripts/seedMeasures.js",
+    "seed:risks": "node scripts/seedRisks.js",
     "build": "echo \"No build step\""
   },
   "dependencies": {

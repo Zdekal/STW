@@ -1,0 +1,11 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // DEV: otevři vše (rychlé prototypování)
+    // Pokud chceš být o chlup přísnější, můžeš dole přepnout na "isSignedIn()"
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
