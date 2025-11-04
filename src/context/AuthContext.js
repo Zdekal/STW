@@ -1,5 +1,5 @@
 import React, { useContext, useState, useEffect, useMemo } from "react";
-import { auth, db } from "../firebase";
+import { auth } from "../firebase";
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -10,7 +10,7 @@ import {
   signInWithRedirect,
   sendPasswordResetEmail,
 } from "firebase/auth";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { upsertUser } from "../services/users"; // <<-- sem přidáš tvůj nový modul
 
 const AuthContext = React.createContext();
 
@@ -28,7 +28,7 @@ export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // --- E-mail/heslo ---
+  // --- Email + heslo ---
   function signup(email, password) {
     return createUserWithEmailAndPassword(auth, email, password);
   }
@@ -37,13 +37,12 @@ export function AuthProvider({ children }) {
     return signInWithEmailAndPassword(auth, email, password);
   }
 
-  // --- Google přihlášení s fallbackem na redirect (Safari, popup blokátory) ---
+  // --- Google přihlášení s fallbackem ---
   async function loginWithGoogle() {
     const provider = new GoogleAuthProvider();
     try {
       return await signInWithPopup(auth, provider);
     } catch (e) {
-      // Safari, iOS, popup-blocked, network issues apod. -> redirect
       const popupCodes = new Set([
         "auth/popup-blocked",
         "auth/popup-closed-by-user",
@@ -67,7 +66,6 @@ export function AuthProvider({ children }) {
   }
 
   useEffect(() => {
-    // DEV bypass: vytvoří „fake“ uživatele pro lokální vývoj bez přihlášení
     if (DEV_BYPASS) {
       const fakeUser = {
         uid: "dev-bypass",
@@ -84,23 +82,12 @@ export function AuthProvider({ children }) {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       try {
         if (user) {
-          // načti ID token + claims (true = vynutí refresh)
-          try {
-            const idTokenResult = await user.getIdTokenResult(true);
-            user.claims = idTokenResult?.claims || {};
-          } catch {
-            user.claims = {};
-          }
+          // aktualizuj claims (bez forced refresh)
+          const idTokenResult = await user.getIdTokenResult().catch(() => null);
+          user.claims = idTokenResult?.claims || {};
 
-          // zapiš/aktualizuj profil uživatele ve Firestore
-          const userRef = doc(db, "users", user.uid);
-          const userData = {
-            email: user.email || null,
-            displayName: user.displayName || null,
-            photoURL: user.photoURL || null,
-            lastLogin: serverTimestamp(),
-          };
-          await setDoc(userRef, userData, { merge: true });
+          // 💾 Ulož nebo aktualizuj uživatele pomocí služby
+          await upsertUser(user);
         }
 
         setCurrentUser(user);
@@ -112,7 +99,6 @@ export function AuthProvider({ children }) {
     return unsubscribe;
   }, []);
 
-  // Memoizace pro stabilní context value
   const value = useMemo(
     () => ({
       currentUser,
