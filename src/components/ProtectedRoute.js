@@ -1,10 +1,13 @@
-import React from 'react';
-import { Navigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+// src/components/ProtectedRoute.jsx
+import React from "react";
+import { Navigate } from "react-router-dom";
+import { hasRole } from "../utils/roles";
+import { useAuth } from "../context/AuthContext";
 
-function ProtectedRoute({ children }) {
+export default function ProtectedRoute({ children, role }) {
   const { currentUser, loading } = useAuth();
 
+  // 1️⃣ – Počkej, až se ověří stav přihlášení
   if (loading) {
     return (
       <div className="flex justify-center items-center h-screen">
@@ -13,14 +16,16 @@ function ProtectedRoute({ children }) {
     );
   }
 
-  // Pokud není uživatel přihlášen, přesměrujeme ho na LOGIN
+  // 2️⃣ – Pokud není přihlášen → login
   if (!currentUser) {
-    // ZDE JE KLÍČOVÁ ZMĚNA
     return <Navigate to="/login" replace />;
   }
 
-  // Pokud je přihlášen, zobrazíme chráněný obsah
+  // 3️⃣ – Pokud je role vyžadována a uživatel ji nemá → forbidden
+  if (role && !hasRole(currentUser, role)) {
+    return <Navigate to="/forbidden" replace />;
+  }
+
+  // 4️⃣ – Jinak zobraz chráněný obsah
   return children;
 }
-
-export default ProtectedRoute;

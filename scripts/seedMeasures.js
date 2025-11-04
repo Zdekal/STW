@@ -1,4 +1,4 @@
-const admin = require('firebase-admin');
+const { admin, db } = require("./_bootstrap");
 const PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT || 'eventsecurityplanner';
 if (!process.env.FIRESTORE_EMULATOR_HOST) {
   console.log('ℹ️  Tip: export FIRESTORE_EMULATOR_HOST=127.0.0.1:8080');
