@@ -1,8 +1,10 @@
+// src/components/Dashboard.js
 import React, { useState, useEffect } from "react";
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useProject } from "../context/ProjectContext"; // ⟵ volitelné: pro zobrazení chyb ukládání
 import ProjectHeader from "./ProjectHeader";
 import {
   Box, Button, Typography, Grid, CircularProgress, Alert,
@@ -12,9 +14,14 @@ import ProjectCard from "./ProjectCard";
 
 export default function Dashboard() {
   const { currentUser, loading: authLoading } = useAuth();
+  const { error: projectError } = useProject?.() || {}; // ⟵ volitelné (pokud kontext existuje)
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);           // loading projektů
   const [error, setError] = useState("");
+
+  // DEV offline režim (umožní zakládat projekty bez přihlášení)
+  const OFFLINE = String(process.env.REACT_APP_DEV_OFFLINE || "").toLowerCase() === "true";
+  const user = currentUser || (OFFLINE ? { uid: "DEV_USER" } : null);
 
   // modály
   const [isTypeSelectionModalOpen, setIsTypeSelectionModalOpen] = useState(false);
@@ -28,15 +35,14 @@ export default function Dashboard() {
     organizationAddress: ""
   });
 
+  const [creating, setCreating] = useState(false); // ⟵ disable tlačítka při vytváření
   const navigate = useNavigate();
 
   // Načtení projektů aktuálního uživatele
   useEffect(() => {
-    // počkej, až doběhne auth
     if (authLoading) return;
 
-    // není přihlášen? ukonči načítání a zobraz info
-    if (!currentUser) {
+    if (!user) {
       setProjects([]);
       setError("Uživatel není přihlášen.");
       setLoading(false);
@@ -49,7 +55,7 @@ export default function Dashboard() {
     // schéma s polem members: [uid]
     const q = query(
       collection(db, "projects"),
-      where("members", "array-contains", currentUser.uid)
+      where("members", "array-contains", user.uid)
     );
 
     const unsubscribe = onSnapshot(
@@ -67,7 +73,7 @@ export default function Dashboard() {
     );
 
     return () => unsubscribe();
-  }, [currentUser, authLoading]);
+  }, [user, authLoading]);
 
   // modály
   const handleOpenTypeSelectionModal = () => setIsTypeSelectionModalOpen(true);
@@ -88,21 +94,26 @@ export default function Dashboard() {
   };
 
   const handleCreateProject = async () => {
-    if (!currentUser) {
+    if (!user) {
       setError("Pro vytvoření projektu musíte být přihlášen.");
       return;
     }
-    if (!newProjectData.name) {
+    if (!selectedProjectType) {
+      setError("Vyberte typ projektu (Akce / Objekt / Kampus).");
+      return;
+    }
+    if (!newProjectData.name?.trim()) {
       alert("Název projektu je povinný.");
       return;
     }
 
     try {
+      setCreating(true);
       const docRef = await addDoc(collection(db, "projects"), {
         ...newProjectData,
         projectType: selectedProjectType,
-        ownerId: currentUser.uid,
-        members: [currentUser.uid],             // pokud časem půjdeš na subkolekci members, uprav viz poznámka níže
+        ownerId: user.uid,
+        members: [user.uid], // pokud časem půjdeš na subkolekci members, uprav to zde
         createdAt: serverTimestamp(),
         lastModified: serverTimestamp()
       });
@@ -111,7 +122,10 @@ export default function Dashboard() {
       navigate(`/project/${docRef.id}`);
     } catch (err) {
       console.error("Chyba při vytváření projektu:", err);
-      setError("Vytvoření projektu selhalo.");
+      const msg = err?.message || err?.code || "Vytvoření projektu selhalo.";
+      setError(msg);
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -126,33 +140,57 @@ export default function Dashboard() {
 
   return (
     <Box p={3}>
+      {/* Info banner pro offline režim */}
+      {OFFLINE && !currentUser && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Vývojový režim bez přihlášení (uživatel: DEV_USER). Vypni přes REACT_APP_DEV_OFFLINE=false.
+        </Alert>
+      )}
+
+      {/* Chyby z ProjectContextu (např. ukládání do cloudu v hlavičce) */}
+      {projectError && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {projectError}
+        </Alert>
+      )}
+
+      {/* Lokální chyba stránky */}
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
+
       {/* Hlavička projektu (lokální draft + Save to cloud) */}
       <ProjectHeader />
 
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={4} mt={2}>
         <Typography variant="h4" component="h1">Moje projekty</Typography>
-        <Button variant="contained" size="large" onClick={handleOpenTypeSelectionModal}>
+        <Button
+          variant="contained"
+          size="large"
+          onClick={handleOpenTypeSelectionModal}
+          disabled={creating}
+        >
           + Založit nový projekt
         </Button>
       </Box>
 
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-
-      <Grid container spacing={3}>
-        {projects.length > 0 ? (
-          projects.map((project) => (
-            <Grid item key={project.id} xs={12} sm={6} md={4}>
-              <ProjectCard project={project} />
-            </Grid>
-          ))
-        ) : (
-          <Grid item xs={12}>
-            <Typography sx={{ p: 2 }}>
-              Zatím nemáte žádné projekty. Založte si první!
-            </Typography>
-          </Grid>
-        )}
-      </Grid>
+    <Grid container spacing={3}>
+    {projects.length > 0 ? (
+        projects.map((project) => (
+        <Grid key={project.id} xs={12} sm={6} md={4}>
+            <ProjectCard project={project} />
+        </Grid>
+        ))
+    ) : (
+        <Grid xs={12}>
+        <Typography sx={{ p: 2 }}>
+            Zatím nemáte žádné projekty. Založte si první!
+        </Typography>
+        </Grid>
+    )}
+    </Grid>
 
       {/* Dialog: výběr typu */}
       <Dialog open={isTypeSelectionModalOpen} onClose={handleCloseAllModals}>
@@ -169,7 +207,7 @@ export default function Dashboard() {
 
       {/* Dialog: detaily projektu */}
       <Dialog open={isDetailsModalOpen} onClose={handleCloseAllModals} maxWidth="sm" fullWidth>
-        <DialogTitle>Založit nový projekt typu „{selectedProjectType}“</DialogTitle>
+        <DialogTitle>Založit nový projekt typu „{selectedProjectType || "—"}“</DialogTitle>
         <DialogContent>
           <TextField autoFocus required margin="dense" name="name" label="Název projektu (interní)" fullWidth variant="standard" onChange={handleInputChange} />
           <TextField margin="dense" name="organizationName" label="Oficiální název organizace" fullWidth variant="standard" onChange={handleInputChange} />
@@ -178,7 +216,9 @@ export default function Dashboard() {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseAllModals}>Zrušit</Button>
-          <Button onClick={handleCreateProject} variant="contained">Vytvořit projekt</Button>
+          <Button onClick={handleCreateProject} variant="contained" disabled={creating}>
+            {creating ? "Vytvářím…" : "Vytvořit projekt"}
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>

@@ -21,13 +21,11 @@ const firebaseConfig = {
   appId: process.env.REACT_APP_FIREBASE_APP_ID,
 };
 
-// --- Bezpečná kontrola env v devu (pomáhá chytit překlep v .env) ---
+// --- Bezpečná kontrola env v devu ---
 if (
   process.env.NODE_ENV !== "production" &&
   Object.values(firebaseConfig).some((v) => !v)
 ) {
-  // V dev režimu vyhoď jasnou chybu, ať víš, co chybí.
-  // (V produkci to necháme být, třeba načítáš runtime proměnné jinak.)
   throw new Error(
     `[firebase] Chybí některé REACT_APP_FIREBASE_* proměnné v .env.
 Zkontroluj:
@@ -54,16 +52,12 @@ setPersistence(auth, browserLocalPersistence).catch(() => {
 });
 
 // --- Emulátory (zapni přes REACT_APP_USE_EMULATORS=true) ---
-const useEmu = String(process.env.REACT_APP_USE_EMULATORS).toLowerCase() === "true";
+const useEmu = String(process.env.REACT_APP_USE_EMULATORS || "").toLowerCase() === "true";
 if (useEmu) {
-  // Pozn.: použij 127.0.0.1 místo "localhost", ať máš méně CORS/hSTS problémů.
-  try {
-    connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
-  } catch {}
-  try {
-    connectFirestoreEmulator(db, "127.0.0.1", 8080);
-  } catch {}
-  try {
-    connectStorageEmulator(storage, "127.0.0.1", 9199);
-  } catch {}
+  console.info("[firebase] Using EMULATORS (Auth:9099, Firestore:8080, Storage:9199)");
+  try { connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true }); } catch {}
+  try { connectFirestoreEmulator(db, "127.0.0.1", 8080); } catch {}
+  try { connectStorageEmulator(storage, "127.0.0.1", 9199); } catch {}
+} else {
+  console.info("[firebase] Using PROD services");
 }
