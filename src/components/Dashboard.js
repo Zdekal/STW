@@ -1,6 +1,6 @@
 // src/components/Dashboard.js
 import React, { useState, useEffect } from "react";
-import { collection, query, where, onSnapshot, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, query, where, onSnapshot, addDoc, serverTimestamp, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -52,27 +52,55 @@ export default function Dashboard() {
     setLoading(true);
     setError("");
 
-    // schéma s polem members: [uid]
-    const q = query(
+    // Query 1: projects where user is in members array (new schema)
+    const qMembers = query(
       collection(db, "projects"),
       where("members", "array-contains", user.uid)
     );
+    // Query 2: projects where user is the owner (backward compat — old docs without members field)
+    const qOwner = query(
+      collection(db, "projects"),
+      where("ownerId", "==", user.uid)
+    );
 
-    const unsubscribe = onSnapshot(
-      q,
+    const unsubscribeMembers = onSnapshot(
+      qMembers,
       (snap) => {
-        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        setProjects(list);
+        setProjects(prev => {
+          const memberIds = new Set(snap.docs.map(d => d.id));
+          const ownerOnly = prev.filter(p => !memberIds.has(p.id) && p._source === 'owner');
+          const memberDocs = snap.docs.map(d => ({ id: d.id, ...d.data(), _source: 'members' }));
+          return [...memberDocs, ...ownerOnly];
+        });
         setLoading(false);
       },
       (err) => {
-        console.error("Chyba při načítání projektů:", err);
+        console.error("Chyba při načítání projektů (members):", err);
+        setLoading(false);
+      }
+    );
+
+    const unsubscribeOwner = onSnapshot(
+      qOwner,
+      (snap) => {
+        setProjects(prev => {
+          const existingIds = new Set(prev.filter(p => p._source === 'members').map(p => p.id));
+          const ownerDocs = snap.docs
+            .filter(d => !existingIds.has(d.id))
+            .map(d => ({ id: d.id, ...d.data(), _source: 'owner' }));
+          const memberDocs = prev.filter(p => p._source === 'members');
+          return [...memberDocs, ...ownerDocs];
+        });
+        setLoading(false);
+      },
+      (err) => {
+        console.error("Chyba při načítání projektů (owner):", err);
         setError("Nepodařilo se načíst projekty.");
         setLoading(false);
       }
     );
 
-    return () => unsubscribe();
+    return () => { unsubscribeMembers(); unsubscribeOwner(); };
   }, [user, authLoading]);
 
   // modály
