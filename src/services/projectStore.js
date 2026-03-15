@@ -1,4 +1,4 @@
-// Local storage for unauthenticated / draft projects
+// Lokální úložiště pro nepřihlášeného uživatele
 const LS_KEY = "esp.draftProject";
 
 export function loadDraft() {
@@ -11,6 +11,7 @@ export function clearDraft() {
   localStorage.removeItem(LS_KEY);
 }
 export function newLocalProject() {
-  const id = "local-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
-  return { id, name: "Nový projekt", createdAt: Date.now(), status: "draft", data: {} };
+  // jednoduché ID (čas + náh. číslo)
+  const id = "local-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2,8);
+  return { id, title: "Nový projekt", createdAt: Date.now(), status: "draft", data: {} };
 }

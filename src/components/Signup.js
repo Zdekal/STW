@@ -2,27 +2,27 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { db } from '../firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import {
-    Container,
-    Paper,
-    Typography,
-    TextField,
-    Button,
-    CircularProgress,
+import { 
+    Container, 
+    Paper, 
+    Typography, 
+    TextField, 
+    Button, 
+    CircularProgress, 
     Alert,
-    Box
+    Box 
 } from '@mui/material';
 
 /**
- * Signup - Step 1: Registration request
- * Submits a request to Firestore. Admin approves it via the Cloud Function,
- * which creates the account and sends the user a password-set link.
- * No password is collected or stored here.
+ * Komponenta Signup - Krok 1: Žádost o registraci
+ * Tento formulář již nevytváří uživatele přímo. Místo toho odešle žádost
+ * o registraci do databáze Firestore, která bude čekat na schválení administrátorem.
  */
 function Signup() {
     const [name, setName] = useState('');
     const [company, setCompany] = useState('');
     const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -33,21 +33,26 @@ function Signup() {
         setError('');
         setLoading(true);
 
-        if (!name || !email) {
+        if (!name || !email || !password) {
             setError('Prosím, vyplňte všechna povinná pole.');
             setLoading(false);
             return;
         }
 
         try {
+            // Vytvoříme dokument v nové kolekci 'registrationRequests'
             await addDoc(collection(db, "registrationRequests"), {
-                name,
-                company,
-                email,
-                status: 'pending',
+                name: name,
+                company: company,
+                email: email,
+                password: password, // Viz bezpečnostní poznámka níže
+                status: 'pending', // Stav žádosti je "čekající na schválení"
                 createdAt: serverTimestamp()
             });
+
+            // Zobrazíme uživateli potvrzovací zprávu
             setRequestSent(true);
+
         } catch (err) {
             console.error("Chyba při odesílání žádosti o registraci: ", err);
             setError('Při odesílání žádosti došlo k chybě. Zkuste to prosím znovu.');
@@ -56,6 +61,15 @@ function Signup() {
         setLoading(false);
     };
 
+    // --- BEZPEČNOSTNÍ UPOZORNĚNÍ ---
+    // Ukládání hesla v čitelné podobě (plaintext) do databáze je extrémně
+    // nebezpečné a v produkčním prostředí by se nemělo nikdy používat.
+    // Tento přístup je zde zvolen pouze jako dočasný krok pro demonstrační
+    // účely, protože Cloud Function bude toto heslo potřebovat k vytvoření účtu.
+    // V reálné aplikaci by se proces řešil jinak (např. odesláním odkazu
+    // pro nastavení hesla až po schválení).
+
+    // Pokud byla žádost úspěšně odeslána, zobrazíme děkovnou obrazovku.
     if (requestSent) {
         return (
             <Container component="main" maxWidth="sm" sx={{ mt: 8 }}>
@@ -65,7 +79,7 @@ function Signup() {
                     </Typography>
                     <Typography variant="body1">
                         Vaše žádost o registraci byla úspěšně odeslána a čeká na schválení.
-                        Po aktivaci účtu obdržíte e-mail s odkazem pro nastavení hesla.
+                        Jakmile bude váš účet aktivován, budeme vás informovat e-mailem.
                     </Typography>
                     <Button component={Link} to="/login" variant="contained" sx={{ mt: 4 }}>
                         Zpět na přihlášení
@@ -75,6 +89,7 @@ function Signup() {
         );
     }
 
+    // Jinak zobrazíme standardní registrační formulář.
     return (
         <Container component="main" maxWidth="xs">
             <Paper elevation={3} sx={{ p: 4, mt: 8, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -115,6 +130,18 @@ function Signup() {
                         autoComplete="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
+                    />
+                    <TextField
+                        margin="normal"
+                        required
+                        fullWidth
+                        name="password"
+                        label="Heslo"
+                        type="password"
+                        id="password"
+                        autoComplete="new-password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
                     />
                     <Button
                         type="submit"

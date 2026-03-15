@@ -37,7 +37,7 @@ function UserManagement() {
     const [processingId, setProcessingId] = useState(null);
 
     const [isAddUserDialogOpen, setAddUserDialogOpen] = useState(false);
-    const [newUser, setNewUser] = useState({ name: '', email: '' });
+    const [newUser, setNewUser] = useState({ name: '', email: '', password: '' });
     const [isCreatingUser, setCreatingUser] = useState(false);
 
     const isUserAdmin = currentUser?.claims?.admin === true;
@@ -88,12 +88,12 @@ function UserManagement() {
     const handleOpenAddUserDialog = () => setAddUserDialogOpen(true);
     const handleCloseAddUserDialog = () => {
         setAddUserDialogOpen(false);
-        setNewUser({ name: '', email: '' });
+        setNewUser({ name: '', email: '', password: '' });
     };
     const handleNewUserChange = (e) => setNewUser({ ...newUser, [e.target.name]: e.target.value });
 
     const handleCreateUser = async () => {
-        if (!newUser.email || !newUser.name) {
+        if (!newUser.email || !newUser.password || !newUser.name) {
             setFeedback({ open: true, message: 'Vyplňte prosím všechna pole.', severity: 'warning' });
             return;
         }
@@ -101,9 +101,10 @@ function UserManagement() {
         try {
             const functions = getFunctions(undefined, 'europe-west1');
             const createUser = httpsCallable(functions, 'createnewuserbyadmin');
-            const result = await createUser({
-                email: newUser.email,
-                displayName: newUser.name
+            const result = await createUser({ 
+                email: newUser.email, 
+                password: newUser.password, 
+                displayName: newUser.name 
             });
             setFeedback({ open: true, message: result.data.message || 'Uživatel úspěšně vytvořen.', severity: 'success' });
             handleCloseAddUserDialog();
@@ -196,9 +197,7 @@ function UserManagement() {
                 <DialogContent>
                     <TextField autoFocus margin="dense" id="name" name="name" label="Celé jméno" type="text" fullWidth variant="outlined" value={newUser.name} onChange={handleNewUserChange} />
                     <TextField margin="dense" id="email" name="email" label="E-mailová adresa" type="email" fullWidth variant="outlined" value={newUser.email} onChange={handleNewUserChange} />
-                    <Alert severity="info" sx={{ mt: 1 }}>
-                        Uživatel obdrží e-mail s odkazem pro nastavení hesla.
-                    </Alert>
+                    <TextField margin="dense" id="password" name="password" label="Heslo" type="password" fullWidth variant="outlined" value={newUser.password} onChange={handleNewUserChange} />
                 </DialogContent>
                 <DialogActions sx={{ p: '16px 24px' }}>
                     <Button onClick={handleCloseAddUserDialog}>Zrušit</Button>
