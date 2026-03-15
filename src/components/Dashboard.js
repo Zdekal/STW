@@ -207,12 +207,12 @@ export default function Dashboard() {
     <Grid container spacing={3}>
     {projects.length > 0 ? (
         projects.map((project) => (
-        <Grid key={project.id} xs={12} sm={6} md={4}>
+        <Grid item key={project.id} xs={12} sm={6} md={4}>
             <ProjectCard project={project} />
         </Grid>
         ))
     ) : (
-        <Grid xs={12}>
+        <Grid item xs={12}>
         <Typography sx={{ p: 2 }}>
             Zatím nemáte žádné projekty. Založte si první!
         </Typography>
