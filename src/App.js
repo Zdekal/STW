@@ -1,6 +1,7 @@
 // src/App.js
 import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
+import { Box, Typography, Button } from "@mui/material";
 
 // --- Veřejné stránky ---
 import Login from "./components/Login";
@@ -24,6 +25,16 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import PublicRoute from "./components/PublicRoute";
 import DashboardLayout from "./components/DashboardLayout";
 import ProjectRouter from "./components/ProjectRouter"; // pokud používáš „chytrou výhybku“ projektů
+
+function Forbidden() {
+  return (
+    <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" height="100vh" gap={2}>
+      <Typography variant="h4">403 – Přístup odepřen</Typography>
+      <Typography variant="body1" color="text.secondary">Na tuto stránku nemáte oprávnění.</Typography>
+      <Button variant="contained" href="/dashboard">Zpět na přehled</Button>
+    </Box>
+  );
+}
 
 function App() {
   return (
@@ -71,7 +82,7 @@ function App() {
         <Route path="/help" element={<Help />} />
 
         {/* Pokud máš router pro projekty */}
-        <Route path="/project/*" element={<ProjectRouter />} />
+        <Route path="/project/:id/*" element={<ProjectRouter />} />
 
         {/* Admin-only stránky (role guard přímo na elementu) */}
         <Route
@@ -118,7 +129,10 @@ function App() {
         }
       />
 
-      {/* Fallback 404 (volitelné) */}
+      {/* Forbidden (role check failed) */}
+      <Route path="/forbidden" element={<Forbidden />} />
+
+      {/* Fallback 404 */}
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );

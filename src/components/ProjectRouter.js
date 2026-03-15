@@ -22,9 +22,7 @@ import ProjectProcedures from './project/ProjectProcedures';
 import ProjectCommunication from './project/ProjectCommunication';
 import SpravaProjektu from './project/SpravaProjektu';
 
-// správně (o JEDNU úroveň nahoru)
-import { scoreRisk, toBand, makeMatrix, DEFAULT_SCALE, DEFAULT_BANDS } from "lib/risks";
-import ProjectRisks from "lib/risks/ProjectRisks";
+import ProjectRisks from "../lib/risks/ProjectRisks";
 
 
 // --- Komponenty pro "Objekt" a "Kampus" ---

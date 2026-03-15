@@ -92,6 +92,7 @@ export function AuthProvider({ children }) {
   const value = useMemo(
     () => ({
       currentUser,
+      loading,
       signup: (email, password) => createUserWithEmailAndPassword(auth, email, password),
       login: (email, password) => signInWithEmailAndPassword(auth, email, password),
       loginWithGoogle: async () => {
@@ -113,12 +114,12 @@ export function AuthProvider({ children }) {
       resetPassword: (email) => sendPasswordResetEmail(auth, email),
       logout: () => signOut(auth),
     }),
-    [currentUser]
+    [currentUser, loading]
   );
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   );
 }
