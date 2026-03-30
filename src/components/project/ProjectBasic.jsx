@@ -428,16 +428,16 @@ function ProjectBasic() {
                 <section>
                     <h2 className="text-xl font-semibold border-b pb-3 mb-6">Specifika akce</h2>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                        Zaškrtnutá specifika byla vybrána při zakládání projektu a formovala Vaši prvotní analýzu rizik. Zde slouží jako referenční přehled a nelze je dodatečně měnit.
+                        Zaškrtněte specifika, která se vztahují na vaši akci. Na základě vybraných specifik se automaticky upraví hodnoty v analýze rizik.
                     </Typography>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {globalVulnerabilities.map(vuln => (
                             <FormControlLabel
                                 key={vuln.id}
                                 control={
-                                    <Checkbox 
-                                        checked={(formData?.selectedVulnerabilities || []).includes(vuln.id)} 
-                                        disabled={true}
+                                    <Checkbox
+                                        checked={(formData?.selectedVulnerabilities || []).includes(vuln.id)}
+                                        onChange={() => handleVulnerabilityToggle(vuln.id)}
                                     />
                                 }
                                 label={vuln.name}
