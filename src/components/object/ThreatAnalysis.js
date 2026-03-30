@@ -17,7 +17,7 @@ function ThreatAnalysis() {
     const [threats, setThreats] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    
+
     // State for the new features
     const [anchorEl, setAnchorEl] = useState(null);
     const [customThreatName, setCustomThreatName] = useState('');
@@ -30,6 +30,21 @@ function ThreatAnalysis() {
     // Effect 1: Check and Initialize the document ONCE on load.
     useEffect(() => {
         const checkAndInitialize = async () => {
+            if (projectId.startsWith('local-')) {
+                import('../../services/localStore').then(({ listProjects, updateProject }) => {
+                    const existing = listProjects().find(p => p.id === projectId);
+                    if (existing && existing.buildings && existing.buildings[objectId]) {
+                        if (!existing.buildings[objectId].threatAnalysis) {
+                            const updatedBuildings = { ...existing.buildings };
+                            updatedBuildings[objectId] = { ...updatedBuildings[objectId], threatAnalysis: [] };
+                            updateProject({ ...existing, buildings: updatedBuildings });
+                        }
+                    }
+                });
+                return;
+            }
+
+            if (!db) return;
             const docRef = objectRef();
             const docSnap = await getDoc(docRef);
 
@@ -43,11 +58,28 @@ function ThreatAnalysis() {
             setError('Initialization failed.');
             console.error(err);
         });
-    }, [objectRef]);
+    }, [objectRef, projectId, objectId]);
 
     // Effect 2: Listen for real-time updates and set the state.
     useEffect(() => {
         setLoading(true);
+
+        if (projectId.startsWith('local-')) {
+            import('../../services/localStore').then(({ listProjects }) => {
+                const lp = listProjects().find(p => p.id === projectId);
+                if (lp && lp.buildings && lp.buildings[objectId]) {
+                    setThreats(lp.buildings[objectId].threatAnalysis || []);
+                }
+                setLoading(false);
+            });
+            return;
+        }
+
+        if (!db) {
+            setLoading(false);
+            return;
+        }
+
         const unsubscribe = onSnapshot(objectRef(), (docSnap) => {
             if (docSnap.exists()) {
                 setThreats(docSnap.data().threatAnalysis || []);
@@ -59,12 +91,33 @@ function ThreatAnalysis() {
             setLoading(false);
         });
         return () => unsubscribe();
-    }, [objectRef]);
-    
-    // Function to save changes to Firestore
+    }, [objectRef, projectId, objectId]);
+
+    // Function to save changes to Firestore / LocalStore
     const handleUpdateThreats = async (updatedThreats) => {
         setThreats(updatedThreats);
-        await setDoc(objectRef(), { 
+
+        if (projectId.startsWith('local-')) {
+            import('../../services/localStore').then(({ listProjects, updateProject }) => {
+                const existing = listProjects().find(p => p.id === projectId);
+                if (existing && existing.buildings && existing.buildings[objectId]) {
+                    const updatedBuildings = { ...existing.buildings };
+                    updatedBuildings[objectId] = {
+                        ...updatedBuildings[objectId],
+                        threatAnalysis: updatedThreats
+                    };
+                    updateProject({
+                        ...existing,
+                        buildings: updatedBuildings,
+                        lastModified: new Date().toISOString()
+                    });
+                }
+            });
+            return;
+        }
+
+        if (!db) return;
+        await setDoc(objectRef(), {
             threatAnalysis: updatedThreats,
             threatAnalysisLastUpdated: serverTimestamp()
         }, { merge: true });
@@ -95,14 +148,14 @@ function ThreatAnalysis() {
         handleUpdateThreats([...threats, newThreat]);
         setCustomThreatName('');
     };
-    
+
     const handleDeleteThreat = (idToDelete) => {
         if (window.confirm("Opravdu chcete smazat tuto hrozbu?")) {
             const updatedThreats = threats.filter(t => t.id !== idToDelete);
             handleUpdateThreats(updatedThreats);
         }
     };
-    
+
     const handleSaveScores = (id, newScores) => {
         const updatedThreats = threats.map(t => t.id === id ? { ...t, ...newScores } : t);
         handleUpdateThreats(updatedThreats);
@@ -128,9 +181,9 @@ function ThreatAnalysis() {
                 </Box>
             </Box>
             <Box sx={{ display: 'flex', gap: 2, mb: 4 }}>
-                <TextField 
-                    label="Přidat vlastní hrozbu" 
-                    value={customThreatName} 
+                <TextField
+                    label="Přidat vlastní hrozbu"
+                    value={customThreatName}
                     onChange={(e) => setCustomThreatName(e.target.value)}
                     size="small"
                     fullWidth
@@ -141,48 +194,55 @@ function ThreatAnalysis() {
             </Box>
 
             {error && <Alert severity="error">{error}</Alert>}
-            
-            <TableContainer>
-                <Table>
-                    <TableHead>
-                        <TableRow>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Hrozba</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold', textAlign: 'center' }}>Pravděpodobnost</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold', textAlign: 'center' }}>Dopad</TableCell>
-                            <TableCell sx={{ fontWeight: 'bold', textAlign: 'center' }}>Akce</TableCell>
-                        </TableRow>
-                    </TableHead>
-                    <TableBody>
-                        {threats.map((threat) => {
-                            const probability = (threat.availability || 1) + (threat.occurrence || 1) + (threat.complexity || 1);
-                            const impact = (threat.lifeAndHealth || 1) + (threat.facility || 1) + (threat.financial || 1) + (threat.community || 1);
-                            return (
-                            <TableRow key={threat.id} hover>
-                                <TableCell>{threat.name}</TableCell>
-                                <TableCell align="center"><Chip label={`${probability} / 21`} /></TableCell>
-                                <TableCell align="center"><Chip label={`${impact} / 28`} color="warning" /></TableCell>
-                                <TableCell align="center">
-                                    <Tooltip title="Upravit hodnocení">
-                                        <IconButton onClick={() => setEditingThreat(threat)}><EditIcon /></IconButton>
-                                    </Tooltip>
-                                    <Tooltip title="Smazat hrozbu">
-                                        <IconButton onClick={() => handleDeleteThreat(threat.id)}><DeleteIcon /></IconButton>
-                                    </Tooltip>
-                                </TableCell>
+
+            {Array.isArray(threats) && (
+                <TableContainer>
+                    <Table>
+                        <TableHead>
+                            <TableRow>
+                                <TableCell sx={{ fontWeight: 'bold' }}>Hrozba</TableCell>
+                                <TableCell sx={{ fontWeight: 'bold', textAlign: 'center' }}>Pravděpodobnost</TableCell>
+                                <TableCell sx={{ fontWeight: 'bold', textAlign: 'center' }}>Dopad</TableCell>
+                                <TableCell sx={{ fontWeight: 'bold', textAlign: 'center' }}>Akce</TableCell>
                             </TableRow>
-                        )})}
-                    </TableBody>
-                </Table>
-            </TableContainer>
+                        </TableHead>
+                        <TableBody>
+                            {threats.map((threat) => {
+                                if (!threat || typeof threat !== 'object') return null;
+                                const probability = (Number(threat.availability) || 1) + (Number(threat.occurrence) || 1) + (Number(threat.complexity) || 1);
+                                const impact = (Number(threat.lifeAndHealth) || 1) + (Number(threat.facility) || 1) + (Number(threat.financial) || 1) + (Number(threat.community) || 1);
 
-            <ThreatScoringDialog 
-                open={!!editingThreat}
-                onClose={() => setEditingThreat(null)}
-                threat={editingThreat}
-                onSave={handleSaveScores}
-            />
+                                return (
+                                    <TableRow key={threat.id || uuidv4()} hover>
+                                        <TableCell>{typeof threat.name === 'string' ? threat.name : 'Neznámá hrozba'}</TableCell>
+                                        <TableCell align="center"><Chip label={`${probability} / 21`} /></TableCell>
+                                        <TableCell align="center"><Chip label={`${impact} / 28`} color="warning" /></TableCell>
+                                        <TableCell align="center">
+                                            <Tooltip title="Upravit hodnocení">
+                                                <IconButton onClick={() => setEditingThreat(threat)}><EditIcon /></IconButton>
+                                            </Tooltip>
+                                            <Tooltip title="Smazat hrozbu">
+                                                <IconButton onClick={() => handleDeleteThreat(threat.id)}><DeleteIcon /></IconButton>
+                                            </Tooltip>
+                                        </TableCell>
+                                    </TableRow>
+                                )
+                            })}
+                        </TableBody>
+                    </Table>
+                </TableContainer>
+            )}
 
-            <RiskMatrix threats={threats} />
+            {editingThreat && (
+                <ThreatScoringDialog
+                    open={!!editingThreat}
+                    onClose={() => setEditingThreat(null)}
+                    threat={editingThreat}
+                    onSave={handleSaveScores}
+                />
+            )}
+
+            {Array.isArray(threats) && <RiskMatrix threats={threats} />}
 
         </Paper>
     );

@@ -1,226 +1,251 @@
 // src/components/Dashboard.js
-import React, { useState, useEffect } from "react";
-import { collection, query, where, onSnapshot, addDoc, serverTimestamp } from "firebase/firestore";
-import { db } from "../firebase";
-import { useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
-import { useProject } from "../context/ProjectContext"; // ⟵ volitelné: pro zobrazení chyb ukládání
-import ProjectHeader from "./ProjectHeader";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
-  Box, Button, Typography, Grid, CircularProgress, Alert,
-  Dialog, DialogActions, DialogContent, DialogTitle, TextField
+  Box,
+  Button,
+  CircularProgress,
+  Alert,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  TextField,
 } from "@mui/material";
+
 import ProjectCard from "./ProjectCard";
+import ProjectWizard from "./project/ProjectWizard";
+import { useAuth } from "../context/AuthContext";
+import { listProjects, createProject } from "../services/localStore";
+import { createCloudProject, subscribeProjectsForUser } from "../services/projectsCloud";
+
+const LOCAL_MODE = String(process.env.REACT_APP_LOCAL_MODE || "").toLowerCase() === "true";
 
 export default function Dashboard() {
-  const { currentUser, loading: authLoading } = useAuth();
-  const { error: projectError } = useProject?.() || {}; // ⟵ volitelné (pokud kontext existuje)
+  const { currentUser } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const [projects, setProjects] = useState([]);
-  const [loading, setLoading] = useState(true);           // loading projektů
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // DEV offline režim (umožní zakládat projekty bez přihlášení)
-  const OFFLINE = String(process.env.REACT_APP_DEV_OFFLINE || "").toLowerCase() === "true";
-  const user = currentUser || (OFFLINE ? { uid: "DEV_USER" } : null);
-
-  // modály
-  const [isTypeSelectionModalOpen, setIsTypeSelectionModalOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
-
   const [selectedProjectType, setSelectedProjectType] = useState(null);
-  const [newProjectData, setNewProjectData] = useState({
-    name: "",
-    organizationName: "",
-    authorName: "",
-    organizationAddress: ""
-  });
 
-  const [creating, setCreating] = useState(false); // ⟵ disable tlačítka při vytváření
-  const navigate = useNavigate();
+  const [creating, setCreating] = useState(false);
 
-  // Načtení projektů aktuálního uživatele
+  // ochrana proti setState po unmountu
+  const mountedRef = useRef(true);
   useEffect(() => {
-    if (authLoading) return;
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
-    if (!user) {
-      setProjects([]);
-      setError("Uživatel není přihlášen.");
-      setLoading(false);
+  useEffect(() => {
+    const main = document.querySelector("main");
+    if (main && typeof main.scrollTo === "function") {
+      main.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    } else {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    }
+  }, [location.pathname]);
+
+  const isCloud = useMemo(() => !LOCAL_MODE && !!currentUser?.uid, [currentUser?.uid]);
+
+  // načtení projektů
+  useEffect(() => {
+    setError("");
+    setLoading(true);
+
+    if (!isCloud) {
+      try {
+        const rows = listProjects();
+        if (mountedRef.current) setProjects(rows);
+      } catch (e) {
+        console.warn(e);
+        if (mountedRef.current) setError("Nepodařilo se načíst projekty.");
+      } finally {
+        if (mountedRef.current) setLoading(false);
+      }
       return;
     }
 
-    setLoading(true);
-    setError("");
-
-    // schéma s polem members: [uid]
-    const q = query(
-      collection(db, "projects"),
-      where("members", "array-contains", user.uid)
-    );
-
-    const unsubscribe = onSnapshot(
-      q,
-      (snap) => {
-        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        setProjects(list);
+    const unsub = subscribeProjectsForUser(
+      currentUser.uid,
+      (rows) => {
+        if (!mountedRef.current) return;
+        setProjects(rows);
         setLoading(false);
       },
       (err) => {
-        console.error("Chyba při načítání projektů:", err);
-        setError("Nepodařilo se načíst projekty.");
+        console.error(err);
+        if (!mountedRef.current) return;
+        setError("Nepodařilo se načíst projekty z cloudu.");
         setLoading(false);
       }
     );
 
-    return () => unsubscribe();
-  }, [user, authLoading]);
+    return () => unsub?.();
+  }, [isCloud, currentUser?.uid]);
 
-  // modály
-  const handleOpenTypeSelectionModal = () => setIsTypeSelectionModalOpen(true);
-  const handleCloseAllModals = () => {
-    setIsTypeSelectionModalOpen(false);
-    setIsDetailsModalOpen(false);
-    setSelectedProjectType(null);
-    setNewProjectData({ name: "", organizationName: "", authorName: "", organizationAddress: "" });
-  };
-  const handleTypeSelect = (type) => {
-    setSelectedProjectType(type);
-    setIsTypeSelectionModalOpen(false);
+  const openCreateModal = (typeValue) => {
+    setError("");
+    setSelectedProjectType(typeValue);
     setIsDetailsModalOpen(true);
   };
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setNewProjectData((prev) => ({ ...prev, [name]: value }));
+
+  const closeAllModals = () => {
+    setIsDetailsModalOpen(false);
+    setSelectedProjectType(null);
+    setError("");
   };
 
-  const handleCreateProject = async () => {
-    if (!user) {
-      setError("Pro vytvoření projektu musíte být přihlášen.");
-      return;
+  const refreshLocalProjects = () => {
+    if (!isCloud) {
+      try {
+        setProjects(listProjects());
+      } catch (e) {
+        console.warn(e);
+        setError("Nepodařilo se obnovit lokální projekty.");
+      }
     }
-    if (!selectedProjectType) {
-      setError("Vyberte typ projektu (Akce / Objekt / Kampus).");
-      return;
-    }
-    if (!newProjectData.name?.trim()) {
-      alert("Název projektu je povinný.");
-      return;
-    }
+  };
+
+  const handleCreateProjectFromWizard = async (wizardData) => {
+    setError("");
+    if (!selectedProjectType) return;
 
     try {
       setCreating(true);
-      const docRef = await addDoc(collection(db, "projects"), {
-        ...newProjectData,
+      const payload = {
+        name: wizardData.name.trim(),
         projectType: selectedProjectType,
-        ownerId: user.uid,
-        members: [user.uid], // pokud časem půjdeš na subkolekci members, uprav to zde
-        createdAt: serverTimestamp(),
-        lastModified: serverTimestamp()
-      });
+        audienceSize: wizardData.audienceSize || 0,
+        environmentType: wizardData.environmentType || "",
+        eventType: wizardData.eventType || "",
+        selectedVulnerabilities: wizardData.selectedVulnerabilities || [],
+        meta: {},
+      };
 
-      handleCloseAllModals();
-      navigate(`/project/${docRef.id}`);
+      if (!isCloud) {
+        const project = createProject(payload);
+        refreshLocalProjects();
+        closeAllModals();
+        navigate(`/project/${project.id}`);
+        return;
+      }
+
+      const created = await createCloudProject(currentUser.uid, payload);
+      closeAllModals();
+      navigate(`/project/${created.id}`);
     } catch (err) {
       console.error("Chyba při vytváření projektu:", err);
-      const msg = err?.message || err?.code || "Vytvoření projektu selhalo.";
-      setError(msg);
+      setError("Vytvoření projektu selhalo.");
     } finally {
-      setCreating(false);
+      if (mountedRef.current) setCreating(false);
     }
   };
 
-  // stavové obrazovky
-  if (authLoading || loading) {
+  if (loading) {
     return (
-      <Box sx={{ display: "flex", justifyContent: "center", p: 4 }}>
+      <div className="flex justify-center items-center h-full p-8">
         <CircularProgress />
-      </Box>
+      </div>
     );
   }
 
   return (
-    <Box p={3}>
-      {/* Info banner pro offline režim */}
-      {OFFLINE && !currentUser && (
-        <Alert severity="info" sx={{ mb: 2 }}>
-          Vývojový režim bez přihlášení (uživatel: DEV_USER). Vypni přes REACT_APP_DEV_OFFLINE=false.
-        </Alert>
-      )}
+    <div className="min-h-full">
+      {/* Hero Section */}
+      <div className="bg-[#0f172a] text-white rounded-3xl p-10 mb-12 shadow-[0_20px_40px_-15px_rgba(30,41,59,0.3)] relative overflow-hidden">
+        {/* Pozadí převzaté z inspirace (Gradient mix) */}
+        <div className="absolute inset-0 opacity-60 bg-gradient-to-br from-indigo-900 via-[#0f172a] to-black"></div>
+        <div className="relative z-10">
+          <h1 className="text-4xl md:text-5xl font-extrabold mb-5 tracking-tight text-white">Bezpečnostní Portál</h1>
+          <p className="text-lg text-slate-300 mb-12 max-w-2xl font-light leading-relaxed">
+            Centrální systém pro správu bezpečnostní dokumentace, hodnocení rizik a detailní plánování struktury a zabezpečení.
+          </p>
 
-      {/* Chyby z ProjectContextu (např. ukládání do cloudu v hlavičce) */}
-      {projectError && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {projectError}
-        </Alert>
-      )}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div
+              onClick={() => openCreateModal("event")}
+              className="bg-white/5 hover:bg-white/10 border border-white/10 backdrop-blur-md p-6 rounded-2xl cursor-pointer transition-all duration-300 flex flex-col items-start group hover:-translate-y-2 hover:shadow-[0_20px_40px_-15px_rgba(0,0,0,0.5)]"
+            >
+              <div className="w-14 h-14 bg-red-500/10 text-red-400 rounded-xl flex items-center justify-center text-2xl mb-5 group-hover:bg-red-500 group-hover:text-white transition-colors duration-300 shadow-inner">
+                <i className="fas fa-calendar-alt"></i>
+              </div>
+              <h3 className="text-xl font-bold mb-2 text-slate-50">Nová Akce</h3>
+              <p className="text-sm text-slate-400 group-hover:text-slate-300 transition-colors duration-300 leading-relaxed">Bezpečnostní plán a generátor checklistů pro jednorázovou událost.</p>
+            </div>
 
-      {/* Lokální chyba stránky */}
+            <div
+              onClick={() => openCreateModal("objekt")}
+              className="bg-white/5 hover:bg-white/10 border border-white/10 backdrop-blur-md p-6 rounded-2xl cursor-pointer transition-all duration-300 flex flex-col items-start group hover:-translate-y-2 hover:shadow-[0_20px_40px_-15px_rgba(0,0,0,0.5)]"
+            >
+              <div className="w-14 h-14 bg-blue-500/10 text-blue-400 rounded-xl flex items-center justify-center text-2xl mb-5 group-hover:bg-blue-500 group-hover:text-white transition-colors duration-300 shadow-inner">
+                <i className="fas fa-building"></i>
+              </div>
+              <h3 className="text-xl font-bold mb-2 text-slate-50">Nový Objekt</h3>
+              <p className="text-sm text-slate-400 group-hover:text-slate-300 transition-colors duration-300 leading-relaxed">Kompletní analýza ohroženosti a bezpečnostní projekt budovy.</p>
+            </div>
+
+            <div
+              onClick={() => openCreateModal("kampus")}
+              className="bg-white/5 hover:bg-white/10 border border-white/10 backdrop-blur-md p-6 rounded-2xl cursor-pointer transition-all duration-300 flex flex-col items-start group hover:-translate-y-2 hover:shadow-[0_20px_40px_-15px_rgba(0,0,0,0.5)]"
+            >
+              <div className="w-14 h-14 bg-emerald-500/10 text-emerald-400 rounded-xl flex items-center justify-center text-2xl mb-5 group-hover:bg-emerald-500 group-hover:text-white transition-colors duration-300 shadow-inner">
+                <i className="fas fa-city"></i>
+              </div>
+              <h3 className="text-xl font-bold mb-2 text-slate-50">Nový Areál</h3>
+              <p className="text-sm text-slate-400 group-hover:text-slate-300 transition-colors duration-300 leading-relaxed">Správa komplexu budov s centrálním přehledem a dílčími objekty.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
+        <Alert severity="error" sx={{ mb: 4 }}>
           {error}
         </Alert>
       )}
 
-      {/* Hlavička projektu (lokální draft + Save to cloud) */}
-      <ProjectHeader />
+      {/* Moje Projekty Section */}
+      <div className="mb-8 flex justify-between items-end border-b pb-4 border-slate-200">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800 tracking-tight">Moje projekty</h2>
+          <p className="text-sm text-slate-500 mt-2 font-medium">
+            Data jsou {isCloud ? "synchronizována přes Firebase" : "uložena lokálně"}.
+          </p>
+        </div>
+      </div>
 
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={4} mt={2}>
-        <Typography variant="h4" component="h1">Moje projekty</Typography>
-        <Button
-          variant="contained"
-          size="large"
-          onClick={handleOpenTypeSelectionModal}
-          disabled={creating}
-        >
-          + Založit nový projekt
-        </Button>
-      </Box>
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        {projects.length > 0 ? (
+          projects.map((project) => (
+            <ProjectCard
+              key={project.id}
+              project={project}
+              onDelete={refreshLocalProjects}
+            />
+          ))
+        ) : (
+          <div className="col-span-full bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl p-8 text-center text-gray-500">
+            Zatím nemáte žádné projekty. Zvolte jeden z typů nahoře a začněte!
+          </div>
+        )}
+      </div>
 
-    <Grid container spacing={3}>
-    {projects.length > 0 ? (
-        projects.map((project) => (
-        <Grid key={project.id} xs={12} sm={6} md={4}>
-            <ProjectCard project={project} />
-        </Grid>
-        ))
-    ) : (
-        <Grid xs={12}>
-        <Typography sx={{ p: 2 }}>
-            Zatím nemáte žádné projekty. Založte si první!
-        </Typography>
-        </Grid>
-    )}
-    </Grid>
-
-      {/* Dialog: výběr typu */}
-      <Dialog open={isTypeSelectionModalOpen} onClose={handleCloseAllModals}>
-        <DialogTitle>Jaký typ projektu chcete založit?</DialogTitle>
-        <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, pt: "8px !important" }}>
-          <Button variant="outlined" onClick={() => handleTypeSelect("akce")}>Akce</Button>
-          <Button variant="outlined" onClick={() => handleTypeSelect("objekt")}>Objekt</Button>
-          <Button variant="outlined" onClick={() => handleTypeSelect("kampus")}>Kampus</Button>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseAllModals}>Zrušit</Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Dialog: detaily projektu */}
-      <Dialog open={isDetailsModalOpen} onClose={handleCloseAllModals} maxWidth="sm" fullWidth>
-        <DialogTitle>Založit nový projekt typu „{selectedProjectType || "—"}“</DialogTitle>
-        <DialogContent>
-          <TextField autoFocus required margin="dense" name="name" label="Název projektu (interní)" fullWidth variant="standard" onChange={handleInputChange} />
-          <TextField margin="dense" name="organizationName" label="Oficiální název organizace" fullWidth variant="standard" onChange={handleInputChange} />
-          <TextField margin="dense" name="authorName" label="Autor projektu" fullWidth variant="standard" onChange={handleInputChange} />
-          <TextField margin="dense" name="organizationAddress" label="Adresa organizace" fullWidth variant="standard" onChange={handleInputChange} />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseAllModals}>Zrušit</Button>
-          <Button onClick={handleCreateProject} variant="contained" disabled={creating}>
-            {creating ? "Vytvářím…" : "Vytvořit projekt"}
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </Box>
+      {/* Celoobrazovkový Wizard nahrazuje původní Dialog */}
+      {isDetailsModalOpen && selectedProjectType && (
+        <ProjectWizard
+          selectedProjectType={selectedProjectType}
+          onComplete={handleCreateProjectFromWizard}
+          onCancel={closeAllModals}
+        />
+      )}
+    </div>
   );
 }

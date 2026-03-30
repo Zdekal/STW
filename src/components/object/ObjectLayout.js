@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink, Outlet, Link } from 'react-router-dom';
+import { NavLink, Outlet, Link, useParams } from 'react-router-dom';
 import { Box, Paper, List, ListItemText, Typography, ListItemButton } from '@mui/material';
 
 // --- ZMĚNA ZDE: Doplněny položky Rizika a Opatření ---
@@ -14,6 +14,9 @@ const navItems = [
 ];
 
 function ObjectLayout() {
+    const { id: projectId } = useParams();
+    const basePath = `/project/${projectId}`;
+
     return (
         <Box sx={{ display: 'flex', height: '100vh', backgroundColor: '#f4f6f8' }}>
             <Paper component="aside" elevation={2} sx={{ width: 280, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
@@ -24,7 +27,7 @@ function ObjectLayout() {
                 </Box>
                 <List component="nav" sx={{ flexGrow: 1 }}>
                     {navItems.map((item) => (
-                        <ListItemButton key={item.to} component={NavLink} to={item.to} end>
+                        <ListItemButton key={item.to} component={NavLink} to={`${basePath}/${item.to}`} end>
                             <ListItemText primary={item.label} />
                         </ListItemButton>
                     ))}

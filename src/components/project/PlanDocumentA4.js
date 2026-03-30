@@ -98,6 +98,47 @@ function PlanDocumentA4() {
     useEffect(() => {
         if (!projectId || !currentUser) { setLoading(false); return; }
 
+        if (projectId.startsWith('local-')) {
+            import('../../services/localStore').then(({ listProjects, updateProject }) => {
+                const lp = listProjects().find(p => p.id === projectId);
+                if (lp) {
+                    setProject({ id: lp.id, ...lp });
+                    if (lp.documentBlocks && Array.isArray(lp.documentBlocks) && lp.documentBlocks.length > 0) {
+                        setBlocks(lp.documentBlocks);
+                    } else {
+                        // Vytvoření výchozí šablony dokumentu pro lokální projekt
+                        const defaultBlocks = [
+                            { id: uuidv4(), type: 'h1', content: `Bezpečnostní plán: ${lp.officialName || 'Nový projekt'}` },
+                            { id: uuidv4(), type: 'p', content: `Datum zpracování: ${new Date().toLocaleDateString('cs-CZ')}\nZpracovatel: ${lp.author || currentUser.email}` },
+                            { id: uuidv4(), type: 'page_break' },
+                            { id: uuidv4(), type: 'h1', content: 'Obsah' },
+                            { id: uuidv4(), type: 'p', content: '1. Základní údaje o akci\n2. Zvažovaná rizika\n3. Bezpečnostní opatření' },
+                            { id: uuidv4(), type: 'page_break' },
+                            { id: uuidv4(), type: 'h1', content: '1. Základní údaje o akci' },
+                            { id: uuidv4(), type: 'dynamic', dynamicKey: 'basicInfo' },
+                            { id: uuidv4(), type: 'h1', content: '2. Zvažovaná rizika' },
+                            { id: uuidv4(), type: 'dynamic', dynamicKey: 'risks' },
+                            { id: uuidv4(), type: 'h1', content: '3. Bezpečnostní opatření' },
+                            { id: uuidv4(), type: 'dynamic', dynamicKey: 'measures' },
+                            { id: uuidv4(), type: 'h1', content: '4. Krizové postupy' },
+                            { id: uuidv4(), type: 'dynamic', dynamicKey: 'procedures' },
+                        ];
+                        setBlocks(defaultBlocks);
+                        updateProject({ ...lp, documentBlocks: defaultBlocks });
+                    }
+                } else {
+                    setError("Projekt nebyl nalezen ve vyrovnávací paměti.");
+                }
+                setLoading(false);
+            });
+            return;
+        }
+
+        if (!db) {
+            setLoading(false);
+            return;
+        }
+
         const unsub = onSnapshot(doc(db, "projects", projectId), (doc) => {
             if (doc.exists()) {
                 const data = doc.data();
@@ -119,6 +160,8 @@ function PlanDocumentA4() {
                         { id: uuidv4(), type: 'dynamic', dynamicKey: 'risks' },
                         { id: uuidv4(), type: 'h1', content: '3. Bezpečnostní opatření' },
                         { id: uuidv4(), type: 'dynamic', dynamicKey: 'measures' },
+                        { id: uuidv4(), type: 'h1', content: '4. Krizové postupy' },
+                        { id: uuidv4(), type: 'dynamic', dynamicKey: 'procedures' },
                     ];
                     setBlocks(defaultBlocks);
                     saveBlocks(defaultBlocks);
@@ -132,15 +175,27 @@ function PlanDocumentA4() {
     // Funkce pro uložení bloků do DB
     const saveBlocks = useCallback(async (newBlocks) => {
         if (!projectId) return;
+
+        if (projectId.startsWith('local-')) {
+            import('../../services/localStore').then(({ listProjects, updateProject }) => {
+                const existing = listProjects().find(p => p.id === projectId);
+                if (existing) {
+                    updateProject({ ...existing, documentBlocks: newBlocks, lastEdited: new Date().toISOString() });
+                }
+            });
+            return;
+        }
+
+        if (!db) return;
         const projectRef = doc(db, "projects", projectId);
         try { await updateDoc(projectRef, { documentBlocks: newBlocks, lastEdited: serverTimestamp() }); }
         catch (err) { console.error("Chyba při ukládání dokumentu:", err); }
     }, [projectId]);
-    
+
     // --- KLÍČOVÁ FUNKCE: Synchronizace dynamického bloku na statické ---
     const handleSyncDynamicBlock = (blockId, dynamicKey) => {
         if (!project) return;
-        
+
         let newContentBlocks = [];
         // Zde generujeme nové bloky na základě dat z projektu
         switch (dynamicKey) {
@@ -151,7 +206,7 @@ function PlanDocumentA4() {
                 break;
             case 'teams':
                 newContentBlocks.push({ id: uuidv4(), type: 'h2', content: 'Týmy podílející se na akci' });
-                const involvedTeams = Object.entries(project.involvedTeams || {}).filter(([_,v])=>v);
+                const involvedTeams = Object.entries(project.involvedTeams || {}).filter(([_, v]) => v);
                 if (involvedTeams.length > 0) {
                     involvedTeams.forEach(([teamName]) => {
                         newContentBlocks.push({ id: uuidv4(), type: 'p', content: `- ${teamName}` });
@@ -162,17 +217,18 @@ function PlanDocumentA4() {
                 break;
             case 'risks':
                 newContentBlocks.push({ id: uuidv4(), type: 'h2', content: 'Zvažovaná rizika' });
-                if ((project.risks || []).length > 0) {
-                    project.risks.forEach(risk => {
+                const currentRisks = project.customRisks || project.risks || [];
+                if (currentRisks.length > 0) {
+                    currentRisks.forEach(risk => {
                         newContentBlocks.push({ id: uuidv4(), type: 'p', content: `- ${risk.name}` });
                     });
                 } else {
-                     newContentBlocks.push({ id: uuidv4(), type: 'p', content: 'Nebyla identifikována žádná rizika.' });
+                    newContentBlocks.push({ id: uuidv4(), type: 'p', content: 'Nebyla identifikována žádná rizika.' });
                 }
                 break;
             case 'measures':
                 newContentBlocks.push({ id: uuidv4(), type: 'h2', content: 'Navrhovaná bezpečnostní opatření' });
-                 const selectedMeasures = Object.entries(project.selectedMeasures || {}).filter(([_,v])=>v);
+                const selectedMeasures = Object.entries(project.selectedMeasures || {}).filter(([_, v]) => v);
                 if (selectedMeasures.length > 0) {
                     selectedMeasures.forEach(([measureName]) => {
                         newContentBlocks.push({ id: uuidv4(), type: 'p', content: `- ${measureName}` });
@@ -181,10 +237,28 @@ function PlanDocumentA4() {
                     newContentBlocks.push({ id: uuidv4(), type: 'p', content: 'Nebyla vybrána žádná opatření.' });
                 }
                 break;
+            case 'procedures':
+                newContentBlocks.push({ id: uuidv4(), type: 'h2', content: 'Krizové postupy pro identifikovaná rizika' });
+                const allProcedureRisks = project.customRisks || project.risks || [];
+                if (allProcedureRisks.length > 0) {
+                    allProcedureRisks.forEach(risk => {
+                        newContentBlocks.push({ id: uuidv4(), type: 'h3', content: risk.name });
+
+                        const procedures = project.riskProcedures?.[risk.id] || {};
+                        newContentBlocks.push({ id: uuidv4(), type: 'p', content: 'Co dělat na místě:\n' + (procedures.immediateReaction || 'Nenastaveno') });
+
+                        if (project.hasControlRoom) {
+                            newContentBlocks.push({ id: uuidv4(), type: 'p', content: 'Co dělá Control Room:\n' + (procedures.coordTeamReaction || 'Nenastaveno') });
+                        }
+                    });
+                } else {
+                    newContentBlocks.push({ id: uuidv4(), type: 'p', content: 'Nejsou definovány žádné krizové postupy.' });
+                }
+                break;
             default:
                 newContentBlocks.push({ id: uuidv4(), type: 'p', content: 'Neznámý dynamický blok.' });
         }
-        
+
         const blockIndex = blocks.findIndex(b => b.id === blockId);
         const newBlocks = [...blocks];
         newBlocks.splice(blockIndex, 1, ...newContentBlocks); // Nahradí dynamický blok za nové statické
@@ -211,19 +285,19 @@ function PlanDocumentA4() {
         handleCloseAddMenu();
         setDynamicMenu(null);
     };
-    
+
     const handleDeleteBlock = (blockId) => {
         if (!window.confirm("Opravdu chcete odstranit tento blok?")) return;
         const newBlocks = blocks.filter(b => b.id !== blockId);
         setBlocks(newBlocks);
         saveBlocks(newBlocks);
     };
-    
+
     // --- Export do .docx (vylepšený) ---
     const handleExportDocx = () => {
         if (!project) return;
         const docxChildren = blocks.flatMap(block => {
-            switch(block.type) {
+            switch (block.type) {
                 case 'h1': return [new Paragraph({ text: block.content, heading: HeadingLevel.HEADING_1, spacing: { before: 300, after: 150 } })];
                 case 'h2': return [new Paragraph({ text: block.content, heading: HeadingLevel.HEADING_2, spacing: { before: 250, after: 120 } })];
                 case 'p': return block.content.split('\n').map(line => {
@@ -234,11 +308,11 @@ function PlanDocumentA4() {
                 });
                 case 'page_break': return [new Paragraph({ children: [new PageBreak()] })];
                 case 'dynamic': // Dynamický blok už by v exportu neměl být, ale pro jistotu
-                     return [new Paragraph({ text: `[Dynamická sekce: ${block.dynamicKey} - Načtěte prosím data před exportem]`, style: "aside" })];
+                    return [new Paragraph({ text: `[Dynamická sekce: ${block.dynamicKey} - Načtěte prosím data před exportem]`, style: "aside" })];
                 default: return [];
             }
         });
-        const docFile = new Document({ styles:{ paragraphStyles:[{id:"aside", name:"Aside", run:{italics:true, color:"999999"}}] }, sections: [{ children: docxChildren }] });
+        const docFile = new Document({ styles: { paragraphStyles: [{ id: "aside", name: "Aside", run: { italics: true, color: "999999" } }] }, sections: [{ children: docxChildren }] });
         Packer.toBlob(docFile).then(blob => {
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement("a");
@@ -271,11 +345,11 @@ function PlanDocumentA4() {
         <Box className="document-container" sx={{ p: 3, bgcolor: '#eef2f6', '@media print': { p: 0, bgcolor: 'transparent' } }}>
             <style type="text/css">{`@media print { body * { visibility: hidden; } .printable-area, .printable-area * { visibility: visible; } .printable-area { position: absolute; left: 0; top: 0; width: 100%;} .no-print { display: none !important; } }`}</style>
             <Box className="no-print" sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-                 <Typography variant="h4" gutterBottom>Náhled bezpečnostního plánu</Typography>
-                 <Box><Button variant="outlined" startIcon={<Print />} onClick={() => window.print()} sx={{mr: 2}}>Vytisknout / PDF</Button>
+                <Typography variant="h4" gutterBottom>Náhled bezpečnostního plánu</Typography>
+                <Box><Button variant="outlined" startIcon={<Print />} onClick={() => window.print()} sx={{ mr: 2 }}>Vytisknout / PDF</Button>
                     <Button variant="contained" startIcon={<Download />} onClick={handleExportDocx}>Exportovat do .docx</Button></Box>
             </Box>
-           
+
             <Box className="printable-area">
                 {allPages.map((pageBlocks, pageIndex) => (
                     <Paper key={pageIndex} sx={pageStyle}>
@@ -283,31 +357,37 @@ function PlanDocumentA4() {
                             {pageBlocks.map((block) => {
                                 const absoluteIndex = blocks.indexOf(block);
                                 return (
-                                <BlockContainer key={block.id} onDelete={() => handleDeleteBlock(block.id)} onAddBlock={(e) => handleOpenAddMenu(e, absoluteIndex)}>
-                                    {block.type === 'dynamic' ? (
-                                        (() => {
-                                            let title = "Neznámý blok";
-                                            let previewContent = <Typography>Náhled není dostupný.</Typography>;
-                                            if (block.dynamicKey === 'basicInfo') {
-                                                title = "Základní údaje";
-                                                previewContent = <><Typography><strong>Oficiální název:</strong> {project.officialName || 'N/A'}</Typography><Typography><strong>Organizátor:</strong> {project.organizer || 'N/A'}</Typography></>
-                                            } else if (block.dynamicKey === 'teams') {
-                                                title = "Týmy";
-                                                previewContent = Object.entries(project.involvedTeams || {}).filter(([_,v])=>v).length > 0 ? <ul>{Object.entries(project.involvedTeams).filter(([_,v])=>v).map(([k])=> <li key={k}><Typography variant="body2">{k}</Typography></li>)}</ul> : <Typography>Nebyly vybrány žádné týmy.</Typography>
-                                            } else if (block.dynamicKey === 'risks') {
-                                                title = "Zvažovaná rizika";
-                                                previewContent = (project.risks || []).length > 0 ? <Box sx={{display:'flex', flexWrap:'wrap', gap:1}}>{project.risks.map(r => <Chip key={r.id} label={r.name} size="small" />)}</Box> : <Typography>Žádná rizika.</Typography>
-                                            } else if (block.dynamicKey === 'measures') {
-                                                title = "Bezpečnostní opatření";
-                                                previewContent = Object.values(project.selectedMeasures || {}).some(v=>v) ? <ul>{Object.entries(project.selectedMeasures).filter(([_,v])=>v).map(([k])=> <li key={k}><Typography variant="body2">{k}</Typography></li>)}</ul> : <Typography>Žádná opatření.</Typography>
-                                            }
-                                            return <DynamicBlock block={block} title={title} onSync={handleSyncDynamicBlock}>{previewContent}</DynamicBlock>
-                                        })()
-                                    ) : (
-                                        <EditableBlock block={block} onSave={handleBlockUpdate} isEditing={editingBlockId === block.id} onToggleEdit={setEditingBlockId} />
-                                    )}
-                                </BlockContainer>
-                            )})}
+                                    <BlockContainer key={block.id} onDelete={() => handleDeleteBlock(block.id)} onAddBlock={(e) => handleOpenAddMenu(e, absoluteIndex)}>
+                                        {block.type === 'dynamic' ? (
+                                            (() => {
+                                                let title = "Neznámý blok";
+                                                let previewContent = <Typography>Náhled není dostupný.</Typography>;
+                                                if (block.dynamicKey === 'basicInfo') {
+                                                    title = "Základní údaje";
+                                                    previewContent = <><Typography><strong>Oficiální název:</strong> {project.officialName || 'N/A'}</Typography><Typography><strong>Organizátor:</strong> {project.organizer || 'N/A'}</Typography></>
+                                                } else if (block.dynamicKey === 'teams') {
+                                                    title = "Týmy";
+                                                    previewContent = Object.entries(project.involvedTeams || {}).filter(([_, v]) => v).length > 0 ? <ul>{Object.entries(project.involvedTeams).filter(([_, v]) => v).map(([k]) => <li key={k}><Typography variant="body2">{k}</Typography></li>)}</ul> : <Typography>Nebyly vybrány žádné týmy.</Typography>
+                                                } else if (block.dynamicKey === 'risks') {
+                                                    title = "Zvažovaná rizika";
+                                                    const currentRisks = project.customRisks || project.risks || [];
+                                                    previewContent = currentRisks.length > 0 ? <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>{currentRisks.map(r => <Chip key={r.id} label={r.name} size="small" />)}</Box> : <Typography>Žádná rizika.</Typography>
+                                                } else if (block.dynamicKey === 'measures') {
+                                                    title = "Bezpečnostní opatření";
+                                                    previewContent = Object.values(project.selectedMeasures || {}).some(v => v) ? <ul>{Object.entries(project.selectedMeasures).filter(([_, v]) => v).map(([k]) => <li key={k}><Typography variant="body2">{k}</Typography></li>)}</ul> : <Typography>Žádná opatření.</Typography>
+                                                } else if (block.dynamicKey === 'procedures') {
+                                                    title = "Krizové postupy";
+                                                    const rCount = (project.customRisks || project.risks || []).length;
+                                                    previewContent = <Typography>Náhled krizových postupů připraven pro {rCount} rizik.</Typography>;
+                                                }
+                                                return <DynamicBlock block={block} title={title} onSync={handleSyncDynamicBlock}>{previewContent}</DynamicBlock>
+                                            })()
+                                        ) : (
+                                            <EditableBlock block={block} onSave={handleBlockUpdate} isEditing={editingBlockId === block.id} onToggleEdit={setEditingBlockId} />
+                                        )}
+                                    </BlockContainer>
+                                )
+                            })}
                         </Box>
                         <PageFooter currentPage={pageIndex + 1} totalPages={allPages.length} />
                     </Paper>
@@ -321,12 +401,13 @@ function PlanDocumentA4() {
                 <Divider />
                 <MenuItem onClick={(e) => setDynamicMenu(e.currentTarget)}>Vložit data z projektu</MenuItem>
             </Menu>
-             <Menu anchorEl={dynamicMenu} open={Boolean(dynamicMenu)} onClose={() => setDynamicMenu(null)}>
+            <Menu anchorEl={dynamicMenu} open={Boolean(dynamicMenu)} onClose={() => setDynamicMenu(null)}>
                 <MenuItem onClick={() => handleAddBlock('dynamic', '', 'basicInfo')}>Základní údaje</MenuItem>
                 <MenuItem onClick={() => handleAddBlock('dynamic', '', 'teams')}>Týmy</MenuItem>
                 <MenuItem onClick={() => handleAddBlock('dynamic', '', 'risks')}>Rizika</MenuItem>
                 <MenuItem onClick={() => handleAddBlock('dynamic', '', 'measures')}>Opatření</MenuItem>
-             </Menu>
+                <MenuItem onClick={() => handleAddBlock('dynamic', '', 'procedures')}>Postupy</MenuItem>
+            </Menu>
         </Box>
     );
 }

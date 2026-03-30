@@ -33,6 +33,25 @@ const ProjectLayout = () => {
     const [error, setError] = useState('');
 
     useEffect(() => {
+        if (id.startsWith('local-')) {
+            import('../../services/localStore').then(({ listProjects }) => {
+                const lp = listProjects().find(p => p.id === id);
+                if (lp) {
+                    setProject(lp);
+                } else {
+                    setError('Lokální projekt nebyl nalezen.');
+                }
+                setLoading(false);
+            });
+            return;
+        }
+
+        if (!db) {
+            setError('Databáze Firebase není dostupná.');
+            setLoading(false);
+            return;
+        }
+
         const projectRef = doc(db, 'projects', id);
         const unsubscribe = onSnapshot(projectRef, (docSnap) => {
             if (docSnap.exists()) {
@@ -53,6 +72,7 @@ const ProjectLayout = () => {
     // --- ZMĚNA ZDE: Upraveno pořadí a názvy položek v menu ---
     const projectNavItems = [
         { text: 'Základní údaje', path: `/project/${id}/basic`, icon: <HomeIcon fontSize="small" /> },
+        { text: 'Dokumenty a podklady', path: `/project/${id}/documents`, icon: <DescriptionIcon fontSize="small" /> },
         { text: 'Zvažovaná rizika', path: `/project/${id}/risks`, icon: <SecurityIcon fontSize="small" /> },
         { text: 'Bezpečnostní opatření', path: `/project/${id}/measures`, icon: <VerifiedUserIcon fontSize="small" /> },
         { text: 'Bezpečnostní plán', path: `/project/${id}/plan`, icon: <DescriptionIcon fontSize="small" /> },
@@ -80,11 +100,10 @@ const ProjectLayout = () => {
 
     const getNavLinkClasses = (path) => {
         const isActive = location.pathname.startsWith(path);
-        return `flex items-center px-4 py-2.5 text-sm font-medium rounded-md transition-colors duration-150 ${
-            isActive
+        return `flex items-center px-4 py-2.5 text-sm font-medium rounded-md transition-colors duration-150 ${isActive
             ? 'bg-blue-600 text-white shadow-md'
             : 'text-gray-600 hover:bg-gray-100'
-        }`;
+            }`;
     };
 
     if (loading) {
@@ -110,7 +129,7 @@ const ProjectLayout = () => {
                     ))}
                     <hr className="my-3 border-gray-200" />
                     {globalNavItems.map((item) => (
-                         <NavLink key={item.text} to={item.path} className={() => getNavLinkClasses(item.path)}>
+                        <NavLink key={item.text} to={item.path} className={() => getNavLinkClasses(item.path)}>
                             {item.icon}
                             <span className="ml-3">{item.text}</span>
                         </NavLink>
@@ -124,7 +143,7 @@ const ProjectLayout = () => {
 
             <main className="flex-1 flex flex-col overflow-hidden">
                 <div className="bg-white border-b p-4">
-                     <Breadcrumbs aria-label="breadcrumb">
+                    <Breadcrumbs aria-label="breadcrumb">
                         <MuiLink component={NavLink} underline="hover" color="inherit" to="/dashboard">
                             Dashboard
                         </MuiLink>

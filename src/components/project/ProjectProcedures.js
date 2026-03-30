@@ -68,16 +68,39 @@ function ProjectProcedures() {
     const [procedures, setProcedures] = useState({});
     const [loading, setLoading] = useState(true);
     const [saveStatus, setSaveStatus] = useState('Načteno');
+    const [hasControlRoom, setHasControlRoom] = useState(false);
     const initialLoadRef = React.useRef(true);
 
     useEffect(() => {
         if (!projectId) return;
+
+        if (projectId.startsWith('local-')) {
+            import('../../services/localStore').then(({ listProjects }) => {
+                const lp = listProjects().find(p => p.id === projectId);
+                if (lp) {
+                    setCheckedRisks(lp.customRisks || lp.risks || []);
+                    setProcedures(lp.riskProcedures || {});
+                    setHasControlRoom(lp.hasControlRoom || false);
+                } else {
+                    console.error("Lokální projekt nenalezen!");
+                }
+                setLoading(false);
+            });
+            return;
+        }
+
+        if (!db) {
+            setLoading(false);
+            return;
+        }
+
         const projectDocRef = doc(db, 'projects', projectId);
         const unsubscribe = onSnapshot(projectDocRef, (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data();
-                setCheckedRisks(data.risks || []);
+                setCheckedRisks(data.customRisks || data.risks || []);
                 setProcedures(data.riskProcedures || {});
+                setHasControlRoom(data.hasControlRoom || false);
             }
             setLoading(false);
         }, (error) => {
@@ -88,9 +111,21 @@ function ProjectProcedures() {
     }, [projectId]);
 
     const saveData = useCallback(async (dataToSave) => {
-        if (!dataToSave || !projectId) return;
-        const projectRef = doc(db, 'projects', projectId);
+        if (!dataToSave || Object.keys(dataToSave).length === 0) return;
+        if (!projectId) return; // Keep existing projectId check
+
         try {
+            if (projectId.startsWith('local-')) {
+                import('../../services/localStore').then(({ listProjects, updateProject }) => {
+                    const existing = listProjects().find(p => p.id === projectId) || {};
+                    updateProject({ ...existing, riskProcedures: dataToSave });
+                    setSaveStatus('Uloženo');
+                });
+                return;
+            }
+
+            if (!db) return; // Add !db check for Firebase path
+            const projectRef = doc(db, 'projects', projectId);
             await updateDoc(projectRef, { riskProcedures: dataToSave, lastEdited: serverTimestamp() });
             setSaveStatus('Uloženo');
         } catch (error) { console.error("Chyba při ukládání postupů:", error); }
@@ -136,10 +171,10 @@ function ProjectProcedures() {
                                     <Typography variant="h6">{risk.name}</Typography>
                                 </AccordionSummary>
                                 <AccordionDetails>
-                                    <Box className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    <Box className={hasControlRoom ? "grid grid-cols-1 md:grid-cols-2 gap-8" : "grid grid-cols-1 gap-8"}>
                                         <Box className="space-y-4">
                                             <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>
-                                                Okamžitá reakce
+                                                Co dělat na místě
                                             </Typography>
                                             <TextField
                                                 multiline
@@ -151,35 +186,25 @@ function ProjectProcedures() {
                                                 onChange={(e) => handleProcedureChange(risk.id, 'immediateReaction', e.target.value)}
                                                 sx={{ '& .MuiOutlinedInput-root': { backgroundColor: 'white' } }}
                                             />
-                                            <FormControlLabel
-                                                control={
-                                                    <Switch
-                                                        checked={!!procedures[risk.id]?.activateCoordTeam}
-                                                        onChange={(e) => handleProcedureChange(risk.id, 'activateCoordTeam', e.target.checked)}
-                                                    />
-                                                }
-                                                label="Aktivovat reakci koordinačního týmu"
-                                            />
                                         </Box>
-                                        <Box>
-                                            {procedures[risk.id]?.activateCoordTeam && (
-                                                <Box className="animate-fade-in">
-                                                    <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>
-                                                        Reakce koordinačního týmu
-                                                    </Typography>
-                                                    <TextField
-                                                        multiline
-                                                        rows={10}
-                                                        fullWidth
-                                                        variant="outlined"
-                                                        placeholder={placeholders.coordTeamReaction}
-                                                        value={procedures[risk.id]?.coordTeamReaction || ''}
-                                                        onChange={(e) => handleProcedureChange(risk.id, 'coordTeamReaction', e.target.value)}
-                                                        sx={{ '& .MuiOutlinedInput-root': { backgroundColor: 'white' } }}
-                                                    />
-                                                </Box>
-                                            )}
-                                        </Box>
+
+                                        {hasControlRoom && (
+                                            <Box className="space-y-4 animate-fade-in">
+                                                <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 'bold' }}>
+                                                    Co dělá Control Room
+                                                </Typography>
+                                                <TextField
+                                                    multiline
+                                                    rows={10}
+                                                    fullWidth
+                                                    variant="outlined"
+                                                    placeholder={placeholders.coordTeamReaction}
+                                                    value={procedures[risk.id]?.coordTeamReaction || ''}
+                                                    onChange={(e) => handleProcedureChange(risk.id, 'coordTeamReaction', e.target.value)}
+                                                    sx={{ '& .MuiOutlinedInput-root': { backgroundColor: 'white' } }}
+                                                />
+                                            </Box>
+                                        )}
                                     </Box>
                                 </AccordionDetails>
                             </Accordion>

@@ -41,6 +41,40 @@ function ProjectTeam() {
     // Načítáme data projektu včetně pole rizik A procedur
     useEffect(() => {
         if (!projectId) return;
+        if (projectId.startsWith('local-')) {
+            import('../../services/localStore').then(({ listProjects }) => {
+                const lp = listProjects().find(p => p.id === projectId);
+                if (lp) {
+                    const data = lp;
+                    setProjectRisks(data.risks || []);
+                    setRiskProcedures(data.riskProcedures || {});
+
+                    if (data.crisisStaffPlan) {
+                        setPlan({
+                            staffMembers: data.crisisStaffPlan.staffMembers || defaultStaffMembers,
+                            activationMethod: data.crisisStaffPlan.activationMethod || "V případě závažného incidentu si členové koordinačního týmu volají navzájem. Dále je zřízena WhatsApp skupina pro rychlé sdílení informací.",
+                            incidentTriggers: data.crisisStaffPlan.incidentTriggers || { automatic: [], manual: [] },
+                            coordinationCenters: data.crisisStaffPlan.coordinationCenters || [{ id: uuidv4(), stage: 'Etapa 1', primaryLocation: '', secondaryLocation: '' }]
+                        });
+                    } else {
+                        setPlan({
+                            staffMembers: defaultStaffMembers,
+                            activationMethod: "V případě závažného incidentu si členové koordinačního týmu volají navzájem. Dále je zřízena WhatsApp skupina pro rychlé sdílení informací.",
+                            incidentTriggers: { automatic: [], manual: [] },
+                            coordinationCenters: [{ id: uuidv4(), stage: 'Etapa 1', primaryLocation: '', secondaryLocation: '' }]
+                        });
+                    }
+                }
+                setLoading(false);
+            });
+            return;
+        }
+
+        if (!db) {
+            setPlan({ staffMembers: defaultStaffMembers, activationMethod: '', incidentTriggers: { automatic: [], manual: [] }, coordinationCenters: [] });
+            setLoading(false);
+            return;
+        }
         const projectDocRef = doc(db, 'projects', projectId);
         const unsubscribe = onSnapshot(projectDocRef, (docSnap) => {
             if (docSnap.exists()) {
@@ -49,7 +83,12 @@ function ProjectTeam() {
                 setRiskProcedures(data.riskProcedures || {}); // <-- Načtení dat z Krizových postupů
 
                 if (data.crisisStaffPlan) {
-                    setPlan(data.crisisStaffPlan);
+                    setPlan({
+                        staffMembers: data.crisisStaffPlan.staffMembers || defaultStaffMembers,
+                        activationMethod: data.crisisStaffPlan.activationMethod || "V případě závažného incidentu si členové koordinačního týmu volají navzájem. Dále je zřízena WhatsApp skupina pro rychlé sdílení informací.",
+                        incidentTriggers: data.crisisStaffPlan.incidentTriggers || { automatic: [], manual: [] },
+                        coordinationCenters: data.crisisStaffPlan.coordinationCenters || [{ id: uuidv4(), stage: 'Etapa 1', primaryLocation: '', secondaryLocation: '' }]
+                    });
                 } else {
                     // Inicializace
                     setPlan({
@@ -75,6 +114,19 @@ function ProjectTeam() {
     // Automatické ukládání (beze změny)
     const saveData = useCallback(async (dataToSave) => {
         if (!dataToSave || !projectId) return;
+
+        if (projectId.startsWith('local-')) {
+            import('../../services/localStore').then(({ listProjects, updateProject }) => {
+                const existing = listProjects().find(p => p.id === projectId);
+                if (existing) {
+                    updateProject({ ...existing, crisisStaffPlan: dataToSave });
+                    setSaveStatus('Uloženo');
+                }
+            });
+            return;
+        }
+
+        if (!db) return;
         const projectRef = doc(db, 'projects', projectId);
         try {
             await updateDoc(projectRef, { crisisStaffPlan: dataToSave, lastEdited: serverTimestamp() });
@@ -139,7 +191,7 @@ function ProjectTeam() {
                 <Typography variant="h5" gutterBottom>1. Složení Krizového štábu</Typography>
                 <TableContainer>
                     <Table size="small">
-                        <TableHead><TableRow><TableCell sx={{fontWeight:'bold'}}>Role</TableCell><TableCell sx={{fontWeight:'bold'}}>Jméno</TableCell><TableCell sx={{fontWeight:'bold'}}>Telefon</TableCell><TableCell sx={{fontWeight:'bold'}}>E-mail</TableCell><TableCell></TableCell></TableRow></TableHead>
+                        <TableHead><TableRow><TableCell sx={{ fontWeight: 'bold' }}>Role</TableCell><TableCell sx={{ fontWeight: 'bold' }}>Jméno</TableCell><TableCell sx={{ fontWeight: 'bold' }}>Telefon</TableCell><TableCell sx={{ fontWeight: 'bold' }}>E-mail</TableCell><TableCell></TableCell></TableRow></TableHead>
                         <TableBody>
                             {plan.staffMembers.map((member) => (
                                 <TableRow key={member.id} sx={{ '&:last-child td, &:last-child th': { border: 0 } }}>
@@ -159,11 +211,11 @@ function ProjectTeam() {
                 <Typography variant="h5" gutterBottom>2. Způsob aktivace štábu</Typography>
                 <TextField multiline rows={3} fullWidth variant="outlined" label="Popište, jak je štáb svoláván" value={plan.activationMethod} onChange={(e) => handlePlanChange('activationMethod', e.target.value)} />
             </Paper>
-            
+
             {/* --- ZMĚNA ZDE: Sekce 3 nyní používá filtrovaný seznam rizik --- */}
             <Paper variant="outlined" sx={{ p: 3 }}>
                 <Typography variant="h5" gutterBottom>3. Incidenty vedoucí k aktivaci</Typography>
-                <Typography variant="body2" color="text.secondary" sx={{mb: 2}}>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                     Tento seznam se automaticky generuje podle rizik, u kterých jste v sekci "Krizové postupy" zaškrtli, že mají aktivovat koordinační tým.
                 </Typography>
 
@@ -185,16 +237,16 @@ function ProjectTeam() {
                                     if (manual) currentValue = 'manual';
 
                                     return (
-                                    <TableRow key={risk.id}>
-                                        <TableCell><Typography>{risk.name}</Typography></TableCell>
-                                        <TableCell>
-                                            <RadioGroup row value={currentValue} onChange={(e) => handleTriggerChange(risk.id, e.target.value)} sx={{justifyContent: 'center'}}>
-                                                <FormControlLabel value="none" control={<Radio />} label="Neaktivuje" />
-                                                <FormControlLabel value="automatic" control={<Radio />} label="Automaticky" />
-                                                <FormControlLabel value="manual" control={<Radio />} label="Manuálně" />
-                                            </RadioGroup>
-                                        </TableCell>
-                                    </TableRow>
+                                        <TableRow key={risk.id}>
+                                            <TableCell><Typography>{risk.name}</Typography></TableCell>
+                                            <TableCell>
+                                                <RadioGroup row value={currentValue} onChange={(e) => handleTriggerChange(risk.id, e.target.value)} sx={{ justifyContent: 'center' }}>
+                                                    <FormControlLabel value="none" control={<Radio />} label="Neaktivuje" />
+                                                    <FormControlLabel value="automatic" control={<Radio />} label="Automaticky" />
+                                                    <FormControlLabel value="manual" control={<Radio />} label="Manuálně" />
+                                                </RadioGroup>
+                                            </TableCell>
+                                        </TableRow>
                                     );
                                 })}
                             </TableBody>
@@ -211,19 +263,19 @@ function ProjectTeam() {
             <Paper variant="outlined" sx={{ p: 3 }}>
                 <Typography variant="h5" gutterBottom>4. Plán Koordinačních center</Typography>
                 <Box className="space-y-4">
-                {plan.coordinationCenters.map((center, index) => (
-                    <Paper key={center.id} variant="outlined" sx={{ p: 2 }}>
-                         <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>
-                             <Typography variant="h6">Centrum {index + 1}</Typography>
-                             <Tooltip title="Smazat centrum"><IconButton size="small" onClick={() => handleRemoveCenter(center.id)} disabled={plan.coordinationCenters.length <= 1}><Delete /></IconButton></Tooltip>
-                         </Box>
-                         <Box className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <TextField label="Etapa / Místo" variant="outlined" value={center.stage} onChange={(e) => handleCenterChange(center.id, 'stage', e.target.value)} />
-                            <TextField label="Primární KC-1 (Adresa, popis)" variant="outlined" value={center.primaryLocation} onChange={(e) => handleCenterChange(center.id, 'primaryLocation', e.target.value)} />
-                            <TextField label="Sekundární KC-2 (Adresa, popis)" variant="outlined" value={center.secondaryLocation} onChange={(e) => handleCenterChange(center.id, 'secondaryLocation', e.target.value)} />
-                         </Box>
-                    </Paper>
-                ))}
+                    {plan.coordinationCenters.map((center, index) => (
+                        <Paper key={center.id} variant="outlined" sx={{ p: 2 }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                                <Typography variant="h6">Centrum {index + 1}</Typography>
+                                <Tooltip title="Smazat centrum"><IconButton size="small" onClick={() => handleRemoveCenter(center.id)} disabled={plan.coordinationCenters.length <= 1}><Delete /></IconButton></Tooltip>
+                            </Box>
+                            <Box className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <TextField label="Etapa / Místo" variant="outlined" value={center.stage} onChange={(e) => handleCenterChange(center.id, 'stage', e.target.value)} />
+                                <TextField label="Primární KC-1 (Adresa, popis)" variant="outlined" value={center.primaryLocation} onChange={(e) => handleCenterChange(center.id, 'primaryLocation', e.target.value)} />
+                                <TextField label="Sekundární KC-2 (Adresa, popis)" variant="outlined" value={center.secondaryLocation} onChange={(e) => handleCenterChange(center.id, 'secondaryLocation', e.target.value)} />
+                            </Box>
+                        </Paper>
+                    ))}
                 </Box>
                 <Button startIcon={<AddCircleOutline />} onClick={handleAddCenter} sx={{ mt: 2 }}>Přidat koordinační centrum</Button>
             </Paper>

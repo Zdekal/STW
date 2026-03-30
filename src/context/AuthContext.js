@@ -1,124 +1,188 @@
 // src/context/AuthContext.js
-import React, { useContext, useState, useEffect, useMemo } from "react";
-import { auth } from "../firebase";
+// Firebase-first Auth + "approval gate" (pending/approved/disabled).
+
+import React, { useContext, useEffect, useMemo, useState } from "react";
 import {
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  signOut,
-  onAuthStateChanged,
   GoogleAuthProvider,
-  signInWithPopup,
-  signInWithRedirect,
+  createUserWithEmailAndPassword,
+  onAuthStateChanged,
   sendPasswordResetEmail,
-  signInAnonymously,
+  signInWithEmailAndPassword,
+  signInWithPopup,
+  signOut,
+  updateProfile,
 } from "firebase/auth";
-import { upsertUser } from "../services/users";
+import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 
-const AuthContext = React.createContext();
+import { auth, db } from "../firebase";
 
-const DEV_BYPASS =
-  process.env.NODE_ENV !== "production" &&
-  typeof window !== "undefined" &&
-  window.location.hostname === "localhost" &&
-  process.env.REACT_APP_BYPASS_AUTH === "1";
+const LOCAL_MODE = String(process.env.REACT_APP_LOCAL_MODE || "").toLowerCase() === "true";
+const ADMIN_EMAIL = (process.env.REACT_APP_ADMIN_EMAIL || "").trim().toLowerCase();
 
-const OFFLINE = String(process.env.REACT_APP_DEV_OFFLINE || "").toLowerCase() === "true";
-const USING_EMULATORS = String(process.env.REACT_APP_USE_EMULATORS || "").toLowerCase() === "true";
-
+const AuthContext = React.createContext(null);
 export function useAuth() {
   return useContext(AuthContext);
 }
 
+function normalizeEmail(email) {
+  return (email || "").trim().toLowerCase();
+}
+
+async function ensureUserDoc(firebaseUser) {
+  if (!db) return null;
+
+  const ref = doc(db, "users", firebaseUser.uid);
+  const snap = await getDoc(ref);
+
+  const email = normalizeEmail(firebaseUser.email);
+  const ADMIN_UID = 'Ubqw75LKRdS1riTCXg6QhPOa8dM2'; // UID administrátora (Email/heslo)
+  const ADMIN_EMAIL_HARDCODED = 'zdenekkalvach@gmail.com'; // Hlavní email administrátora
+  const isAdmin =
+    email === ADMIN_EMAIL_HARDCODED ||
+    firebaseUser.uid === ADMIN_UID ||
+    (ADMIN_EMAIL && email === ADMIN_EMAIL);
+
+  if (!snap.exists()) {
+    const base = {
+      email: firebaseUser.email ?? null,
+      displayName: firebaseUser.displayName ?? null,
+      photoURL: firebaseUser.photoURL ?? null,
+      createdAt: serverTimestamp(),
+      lastLoginAt: serverTimestamp(),
+      role: isAdmin ? "admin" : "user",
+      status: isAdmin ? "approved" : "pending",
+    };
+    await setDoc(ref, base, { merge: true });
+    return { id: firebaseUser.uid, ...base };
+  }
+
+  const data = snap.data() || {};
+
+  // doplň chybějící systémová pole (migrace starých dokumentů)
+  const patch = {};
+  if (!data.createdAt) patch.createdAt = serverTimestamp();
+  if (!data.role) patch.role = isAdmin ? "admin" : "user";
+  if (!data.status) patch.status = isAdmin ? "approved" : "pending";
+  if (Object.keys(patch).length) {
+    await updateDoc(ref, patch).catch(() => { });
+  }
+
+  // auto-promote admin by email (useful when you rebuild / migrate)
+  if (isAdmin && (data.role !== "admin" || data.status !== "approved")) {
+    await updateDoc(ref, {
+      role: "admin",
+      status: "approved",
+      lastLoginAt: serverTimestamp(),
+    });
+    return { id: snap.id, ...data, role: "admin", status: "approved" };
+  }
+
+  await updateDoc(ref, { lastLoginAt: serverTimestamp() }).catch(() => { });
+  return { id: snap.id, ...data, ...patch };
+}
+
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
+  const [profile, setProfile] = useState(null); // users/{uid}
   const [loading, setLoading] = useState(true);
 
-  // Hlavní listener auth stavu
   useEffect(() => {
-    if (DEV_BYPASS) {
-      console.info("[auth] DEV_BYPASS -> fake user");
-      const fakeUser = {
-        uid: "dev-bypass",
-        email: "dev@local",
-        displayName: "Dev User",
-        photoURL: null,
-        claims: { admin: true, dev: true },
-      };
-      setCurrentUser(fakeUser);
+    if (LOCAL_MODE) {
+      // Upraveno pro lokální přístup bez hesla přímo na Váš admin účet
+      setCurrentUser({ uid: "Ubqw75LKRdS1riTCXg6QhPOa8dM2", email: "zdenekkalvach@gmail.com", displayName: "Admin Lokálně" });
+      setProfile({ role: "admin", status: "approved" });
       setLoading(false);
       return;
     }
 
-    const unsub = onAuthStateChanged(auth, async (user) => {
+    if (!auth) {
+      console.error("[AuthContext] Firebase auth is not initialized. Check env vars.");
+      setLoading(false);
+      return;
+    }
+
+    const unsub = onAuthStateChanged(auth, async (u) => {
       try {
-        if (user) {
-          // claims jen pokud nejsme na emulátoru (na emu to často není potřeba)
-          if (!USING_EMULATORS) {
-            const idTokenResult = await user.getIdTokenResult().catch(() => null);
-            user.claims = idTokenResult?.claims || {};
-          }
-          // upsertUser přeskoč na emulátoru (ať nenarážíš na rules)
-          if (!USING_EMULATORS) {
-            await upsertUser(user).catch(() => {});
-          }
-          console.info("[auth] signed in:", {
-            uid: user.uid,
-            isAnonymous: user.isAnonymous ?? false,
-            emu: USING_EMULATORS,
-          });
-        } else {
-          console.info("[auth] signed out");
+        setCurrentUser(u || null);
+        if (!u) {
+          setProfile(null);
+          setLoading(false);
+          return;
         }
-        setCurrentUser(user);
-      } finally {
+        const userDoc = await ensureUserDoc(u);
+        setProfile(userDoc);
+        setLoading(false);
+      } catch (e) {
+        console.error("[AuthContext] Failed to load user profile:", e);
+        setProfile(null);
         setLoading(false);
       }
     });
 
-    return unsub;
+    return () => unsub();
   }, []);
 
-  // V OFFLINE režimu (na lokále) se přihlaš anonymně, aby Firestore měl request.auth.uid
-  useEffect(() => {
-    if (!DEV_BYPASS && OFFLINE && !currentUser) {
-      console.info("[auth] DEV_OFFLINE -> signInAnonymously()");
-      signInAnonymously(auth).catch((e) => {
-        console.warn("[auth] anonymous sign-in failed:", e?.code || e?.message || e);
-      });
+  const signup = async (email, password, displayName) => {
+    if (!auth) throw new Error("Auth not initialized");
+    const cred = await createUserWithEmailAndPassword(auth, email, password);
+    if (displayName) {
+      await updateProfile(cred.user, { displayName }).catch(() => { });
     }
-  }, [currentUser]);
+    // user doc will be created by onAuthStateChanged via ensureUserDoc
+    return cred.user;
+  };
 
-  // Auth API
-  const value = useMemo(
-    () => ({
-      currentUser,
-      signup: (email, password) => createUserWithEmailAndPassword(auth, email, password),
-      login: (email, password) => signInWithEmailAndPassword(auth, email, password),
-      loginWithGoogle: async () => {
-        const provider = new GoogleAuthProvider();
-        try {
-          return await signInWithPopup(auth, provider);
-        } catch (e) {
-          const popupCodes = new Set([
-            "auth/popup-blocked",
-            "auth/popup-closed-by-user",
-            "auth/cancelled-popup-request",
-            "auth/network-request-failed",
-            "auth/internal-error",
-          ]);
-          if (popupCodes.has(e?.code)) return await signInWithRedirect(auth, provider);
-          throw e;
-        }
-      },
-      resetPassword: (email) => sendPasswordResetEmail(auth, email),
-      logout: () => signOut(auth),
-    }),
-    [currentUser]
-  );
+  const login = async (email, password) => {
+    if (!auth) throw new Error("Auth not initialized");
+    const cred = await signInWithEmailAndPassword(auth, email, password);
+    return cred.user;
+  };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {!loading && children}
-    </AuthContext.Provider>
-  );
+  const loginWithGoogle = async () => {
+    if (!auth) throw new Error("Auth not initialized");
+    const provider = new GoogleAuthProvider();
+    const cred = await signInWithPopup(auth, provider);
+    return cred.user;
+  };
+
+  const resetPassword = async (email) => {
+    if (!auth) throw new Error("Auth not initialized");
+    return sendPasswordResetEmail(auth, email);
+  };
+
+  const logout = async () => {
+    if (LOCAL_MODE) {
+      setCurrentUser(null);
+      setProfile(null);
+      return;
+    }
+    if (!auth) return;
+    await signOut(auth);
+  };
+
+  const value = useMemo(() => {
+    const merged = {
+      uid: currentUser?.uid,
+      email: currentUser?.email,
+      displayName: currentUser?.displayName,
+      photoURL: currentUser?.photoURL,
+      role: profile?.role || "user",
+      status: profile?.status || "pending",
+      // backward compatibility (some components check currentUser.claims.admin)
+      claims: { admin: (profile?.role || "user") === "admin" },
+    };
+
+    return {
+      currentUser: currentUser ? merged : null,
+      profile,
+      loading,
+      signup,
+      login,
+      loginWithGoogle,
+      resetPassword,
+      logout,
+    };
+  }, [currentUser, profile, loading]);
+
+  return <AuthContext.Provider value={value}>{!loading && children}</AuthContext.Provider>;
 }

@@ -16,15 +16,14 @@ import ProjectMeasures from './project/ProjectMeasures';
 import ProjectChecklistWrapper from './project/ProjectChecklistWrapper.jsx';
 import PlanDocumentA4 from './project/PlanDocumentA4';
 import ProjectLogList from './project/ProjectLogList';
-// --- ZMĚNA ZDE: Import nových komponent pro menu ---
 import ProjectTeam from './project/ProjectTeam';
 import ProjectProcedures from './project/ProjectProcedures';
 import ProjectCommunication from './project/ProjectCommunication';
-import SpravaProjektu from './project/SpravaProjektu';
+import ProjectSharing from './project/ProjectSharing';
+import ProjectDocuments from './project/ProjectDocuments';
+import ProjectManagement from './project/ProjectManagement';
 
-// správně (o JEDNU úroveň nahoru)
-import { scoreRisk, toBand, makeMatrix, DEFAULT_SCALE, DEFAULT_BANDS } from "lib/risks";
-import ProjectRisks from "lib/risks/ProjectRisks";
+import ProjectRisksWrapper from "./project/ProjectRisksWrapper";
 
 
 // --- Komponenty pro "Objekt" a "Kampus" ---
@@ -51,6 +50,23 @@ function ProjectRouter() {
                 return;
             }
             try {
+                if (id.startsWith('local-')) {
+                    import('../services/localStore').then(({ listProjects }) => {
+                        const lp = listProjects().find(p => p.id === id);
+                        if (lp) {
+                            setProjectData({ type: lp.projectType || 'event', loading: false, error: '' });
+                        } else {
+                            setProjectData({ loading: false, error: 'Lokální projekt nebyl nalezen.' });
+                        }
+                    });
+                    return;
+                }
+
+                if (!db) {
+                    setProjectData({ loading: false, error: 'Databáze Firebase není dostupná.' });
+                    return;
+                }
+
                 const projectRef = doc(db, 'projects', id);
                 const docSnap = await getDoc(projectRef);
                 if (docSnap.exists()) {
@@ -73,7 +89,6 @@ function ProjectRouter() {
         return <Box p={4}><Alert severity="error">{projectData.error}</Alert></Box>;
     }
 
-    // Scénář 1: Projekt typu KAMPUS (beze změny)
     if (projectData.type === 'kampus') {
         return (
             <Routes>
@@ -83,12 +98,12 @@ function ProjectRouter() {
                     <Route path="incident-log" element={<IncidentLog />} />
                     <Route path="documentation" element={<SecurityDocumentation />} />
                     <Route path="threat-analysis" element={<ThreatAnalysis />} />
-                    <Route path="risks" element={<ProjectRisks />} />
+                    <Route path="risks" element={<ProjectRisksWrapper />} />
                     <Route path="measures" element={<ProjectMeasures />} />
                     <Route path="object-plan" element={<ObjectSecurityPlan />} />
                     <Route path="soft-target-card" element={<SoftTargetCard />} />
                 </Route>
-                <Route path="*" element={<CampusLayout />}>
+                <Route element={<CampusLayout />}>
                     <Route index element={<Navigate to="overview" replace />} />
                     <Route path="overview" element={<CampusOverview />} />
                     <Route path="directives" element={<SecurityDirectives />} />
@@ -105,11 +120,11 @@ function ProjectRouter() {
     if (projectData.type === 'objekt') {
         return (
             <Routes>
-                <Route path="*" element={<ObjectLayout />}>
+                <Route element={<ObjectLayout />}>
                     <Route index element={<Navigate to="questionnaire" replace />} />
                     <Route path="questionnaire" element={<SecurityQuestionnaire />} />
                     <Route path="threat-analysis" element={<ThreatAnalysis />} />
-                    <Route path="risks" element={<ProjectRisks />} />
+                    <Route path="risks" element={<ProjectRisksWrapper />} />
                     <Route path="measures" element={<ProjectMeasures />} />
                     <Route path="directives" element={<SecurityDirectives />} />
                     <Route path="plan" element={<SecurityPlan />} />
@@ -122,10 +137,11 @@ function ProjectRouter() {
     // Scénář 3: Projekt typu AKCE (výchozí)
     return (
         <Routes>
-            <Route path="*" element={<ProjectLayout />}>
+            <Route element={<ProjectLayout />}>
                 <Route index element={<Navigate to="basic" replace />} />
                 <Route path="basic" element={<ProjectBasic />} />
-                <Route path="risks" element={<ProjectRisks />} />
+                <Route path="documents" element={<ProjectDocuments />} />
+                <Route path="risks" element={<ProjectRisksWrapper />} />
                 <Route path="measures" element={<ProjectMeasures />} />
                 <Route path="log" element={<ProjectLogList />} />
                 <Route path="checklist" element={<ProjectChecklistWrapper />} />
@@ -135,7 +151,8 @@ function ProjectRouter() {
                 <Route path="team" element={<ProjectTeam />} />
                 <Route path="procedures" element={<ProjectProcedures />} />
                 <Route path="communication" element={<ProjectCommunication />} />
-                <Route path="management" element={<SpravaProjektu />} />
+                <Route path="sharing" element={<ProjectSharing />} />
+                <Route path="management" element={<ProjectManagement />} />
             </Route>
         </Routes>
     );
