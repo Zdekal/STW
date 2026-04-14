@@ -18,6 +18,7 @@ import DashboardIcon from '@mui/icons-material/Dashboard';
 import SettingsIcon from '@mui/icons-material/Settings';
 import LogoutIcon from '@mui/icons-material/Logout';
 import GroupsIcon from '@mui/icons-material/Groups';
+import ContactsIcon from '@mui/icons-material/Contacts';
 import ListAltIcon from '@mui/icons-material/ListAlt';
 import CampaignIcon from '@mui/icons-material/Campaign';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
@@ -72,15 +73,16 @@ const ProjectLayout = () => {
     // --- ZMĚNA ZDE: Upraveno pořadí a názvy položek v menu ---
     const projectNavItems = [
         { text: 'Základní údaje', path: `/project/${id}/basic`, icon: <HomeIcon fontSize="small" /> },
-        { text: 'Dokumenty a podklady', path: `/project/${id}/documents`, icon: <DescriptionIcon fontSize="small" /> },
         { text: 'Zvažovaná rizika', path: `/project/${id}/risks`, icon: <SecurityIcon fontSize="small" /> },
         { text: 'Bezpečnostní opatření', path: `/project/${id}/measures`, icon: <VerifiedUserIcon fontSize="small" /> },
-        { text: 'Bezpečnostní plán', path: `/project/${id}/plan`, icon: <DescriptionIcon fontSize="small" /> },
-        { text: 'Checklist', path: `/project/${id}/checklist`, icon: <PlaylistAddCheckIcon fontSize="small" /> },
         { text: 'Krizové postupy', path: `/project/${id}/procedures`, icon: <ListAltIcon fontSize="small" /> },
-        { text: 'Krizový štáb', path: `/project/${id}/team`, icon: <GroupsIcon fontSize="small" /> },
+        { text: 'Koordinační plán', path: `/project/${id}/team`, icon: <GroupsIcon fontSize="small" /> },
         { text: 'Krizová komunikace', path: `/project/${id}/communication`, icon: <CampaignIcon fontSize="small" /> },
+        { text: 'Týmy a kontakty', path: `/project/${id}/contacts`, icon: <ContactsIcon fontSize="small" /> },
+        { text: 'Checklist', path: `/project/${id}/checklist`, icon: <PlaylistAddCheckIcon fontSize="small" /> },
         { text: 'Protokol událostí', path: `/project/${id}/log`, icon: <EventNoteIcon fontSize="small" /> },
+        { divider: true },
+        { text: 'Výstupní dokumenty', path: `/project/${id}/output-documents`, icon: <DescriptionIcon fontSize="small" /> },
         { text: 'Správa projektu', path: `/project/${id}/management`, icon: <AdminPanelSettingsIcon fontSize="small" /> },
     ];
 
@@ -121,11 +123,15 @@ const ProjectLayout = () => {
                     <img src={logo} alt="Logo Aplikace" className="h-12" />
                 </div>
                 <nav className="flex-1 p-4 space-y-2">
-                    {projectNavItems.map((item) => (
-                        <NavLink key={item.text} to={item.path} className={() => getNavLinkClasses(item.path)}>
-                            {item.icon}
-                            <span className="ml-3">{item.text}</span>
-                        </NavLink>
+                    {projectNavItems.map((item, idx) => (
+                        item.divider ? (
+                            <hr key={`divider-${idx}`} className="my-2 border-gray-200" />
+                        ) : (
+                            <NavLink key={item.text} to={item.path} className={() => getNavLinkClasses(item.path)}>
+                                {item.icon}
+                                <span className="ml-3">{item.text}</span>
+                            </NavLink>
+                        )
                     ))}
                     <hr className="my-3 border-gray-200" />
                     {globalNavItems.map((item) => (

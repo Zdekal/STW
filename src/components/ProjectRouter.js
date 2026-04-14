@@ -14,14 +14,14 @@ import CampusObjectLayout from './object/CampusObjectLayout';
 import ProjectBasic from './project/ProjectBasic.jsx';
 import ProjectMeasures from './project/ProjectMeasures';
 import ProjectChecklistWrapper from './project/ProjectChecklistWrapper.jsx';
-import PlanDocumentA4 from './project/PlanDocumentA4';
 import ProjectLogList from './project/ProjectLogList';
 import ProjectTeam from './project/ProjectTeam';
+import ProjectContacts from './project/ProjectContacts';
 import ProjectProcedures from './project/ProjectProcedures';
 import ProjectCommunication from './project/ProjectCommunication';
 import ProjectSharing from './project/ProjectSharing';
-import ProjectDocuments from './project/ProjectDocuments';
 import ProjectManagement from './project/ProjectManagement';
+import ProjectOutputDocuments from './project/ProjectOutputDocuments';
 
 import ProjectRisksWrapper from "./project/ProjectRisksWrapper";
 
@@ -101,13 +101,15 @@ function ProjectRouter() {
                     <Route path="risks" element={<ProjectRisksWrapper />} />
                     <Route path="measures" element={<ProjectMeasures />} />
                     <Route path="object-plan" element={<ObjectSecurityPlan />} />
+                    <Route path="output-documents" element={<ProjectOutputDocuments />} />
                     <Route path="soft-target-card" element={<SoftTargetCard />} />
                 </Route>
                 <Route element={<CampusLayout />}>
                     <Route index element={<Navigate to="overview" replace />} />
                     <Route path="overview" element={<CampusOverview />} />
                     <Route path="directives" element={<SecurityDirectives />} />
-                    <Route path="plan" element={<SecurityPlan />} />
+                    <Route path="plan" element={<ProjectOutputDocuments />} />
+                    <Route path="output-documents" element={<ProjectOutputDocuments />} />
                     <Route path="central-measures" element={<ProjectMeasures />} />
                     <Route path="crisis-team" element={<CrisisPreparednessPlan />} />
                     <Route path="central-incident-log" element={<IncidentLog />} />
@@ -127,7 +129,8 @@ function ProjectRouter() {
                     <Route path="risks" element={<ProjectRisksWrapper />} />
                     <Route path="measures" element={<ProjectMeasures />} />
                     <Route path="directives" element={<SecurityDirectives />} />
-                    <Route path="plan" element={<SecurityPlan />} />
+                    <Route path="plan" element={<ProjectOutputDocuments />} />
+                    <Route path="output-documents" element={<ProjectOutputDocuments />} />
                     <Route path="soft-target-card" element={<SoftTargetCard />} />
                 </Route>
             </Routes>
@@ -140,15 +143,16 @@ function ProjectRouter() {
             <Route element={<ProjectLayout />}>
                 <Route index element={<Navigate to="basic" replace />} />
                 <Route path="basic" element={<ProjectBasic />} />
-                <Route path="documents" element={<ProjectDocuments />} />
+                <Route path="documents" element={<ProjectOutputDocuments />} />
                 <Route path="risks" element={<ProjectRisksWrapper />} />
                 <Route path="measures" element={<ProjectMeasures />} />
                 <Route path="log" element={<ProjectLogList />} />
                 <Route path="checklist" element={<ProjectChecklistWrapper />} />
-                <Route path="plan" element={<PlanDocumentA4 />} />
+                <Route path="plan" element={<ProjectOutputDocuments />} />
+                <Route path="output-documents" element={<ProjectOutputDocuments />} />
 
-                {/* --- ZMĚNA ZDE: Přidání cest pro nové komponenty --- */}
                 <Route path="team" element={<ProjectTeam />} />
+                <Route path="contacts" element={<ProjectContacts />} />
                 <Route path="procedures" element={<ProjectProcedures />} />
                 <Route path="communication" element={<ProjectCommunication />} />
                 <Route path="sharing" element={<ProjectSharing />} />

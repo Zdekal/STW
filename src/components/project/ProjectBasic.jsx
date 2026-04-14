@@ -1,35 +1,48 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { db } from '../../firebase';
 import { useAuth } from '../../context/AuthContext';
 import { doc, onSnapshot, setDoc, serverTimestamp, getDoc } from 'firebase/firestore';
-import { TextField, Button, Checkbox, FormControlLabel, FormGroup, IconButton, CircularProgress, Chip, Typography, FormControl, InputLabel, Select, MenuItem, Box, Paper } from '@mui/material';
-import { AddCircleOutline, RemoveCircleOutline, CloudDone } from '@mui/icons-material';
+import { TextField, Button, Checkbox, FormControlLabel, FormGroup, IconButton, CircularProgress, Chip, Typography, FormControl, InputLabel, Select, MenuItem, Box, Paper, Collapse } from '@mui/material';
+import { AddCircleOutline, RemoveCircleOutline, CloudDone, Schedule, ExpandMore, DeleteOutline, Business, Handshake, Campaign, EmojiEvents, Groups, Close } from '@mui/icons-material';
 import FileUploadDropzone from './FileUploadDropzone';
 
 // --- Datová struktura pro týmy (nyní slouží jako VÝCHOZÍ hodnota) ---
 const defaultTeamCategories = [
     {
-        title: '📋 Hlavní organizační složky',
-        teams: ['Vedení akce', 'Produkční tým', 'Realizační tým', 'Technický tým', 'Bezpečnostní služba', 'Zdravotnická služba', 'Požární dohled', 'Sportovní organizace závodu']
+        title: 'Hlavní organizační složky',
+        icon: 'Business',
+        teams: ['Vedení akce', 'Produkční tým', 'Technický tým', 'Bezpečnostní služba (SBS)', 'Zdravotnická služba', 'Pořadatelé na trati', 'Úsekáři / vedoucí úseků', 'Velitel trati']
     },
     {
-        title: '👥 Smluvní a podpůrné skupiny',
-        teams: ['Stánkoví prodejci', 'Dodavatelé (technika, stavby, sanita)', 'Úklidová služba', 'Dopravní koordinátoři', 'Dobrovolníci / brigádníci', 'Složky IZS (Policie, HZS, ZZS)']
+        title: 'Smluvní a podpůrné skupiny',
+        icon: 'Handshake',
+        teams: ['Stánkoví prodejci', 'Dodavatelé (technika, stavby, sanita)', 'Catering / občerstvení', 'Úklidová služba', 'Dopravní koordinátoři', 'Dobrovolníci / brigádníci', 'Složky IZS (Policie, HZS, ZZS)']
     },
     {
-        title: '🎤 Komunikační a návštěvnický servis',
-        teams: ['Tým zákaznické podpory', 'Tiskový a mediální tým (PR)', 'Moderátoři / speakři']
+        title: 'Komunikace a média',
+        icon: 'Campaign',
+        teams: ['Tiskový a mediální tým (PR)', 'Moderátoři / speakři']
     },
     {
-        title: '🎭 Programová složka',
-        teams: ['Umělci / sportovci / vystupující', 'Manažeři vystupujících / jejich týmy']
+        title: 'Sportovní a programová složka',
+        icon: 'EmojiEvents',
+        teams: ['Sportovní organizace závodu', 'Závodníci / sportovci', 'Manažeři týmů / doprovod']
     },
     {
-        title: '🧭 Další důležité skupiny',
-        teams: ['Místní úřady / povolovací orgány', 'Partneři a sponzoři', 'Návštěvníci se zvláštními potřebami']
+        title: 'Další důležité skupiny',
+        icon: 'Groups',
+        teams: ['Místní úřady / povolovací orgány', 'Partneři a sponzoři']
     }
 ];
+
+const categoryIcons = {
+    Business: <Business />,
+    Handshake: <Handshake />,
+    Campaign: <Campaign />,
+    EmojiEvents: <EmojiEvents />,
+    Groups: <Groups />,
+};
 
 // Komponenta pro zobrazení stavu ukládání (beze změny)
 const SaveStatusIndicator = ({ status }) => {
@@ -54,6 +67,51 @@ function ProjectBasic() {
     const [metaLoading, setMetaLoading] = useState(true);
 
     const latestDataRef = useRef(null);
+
+    // Stav rozbalení detailního harmonogramu - v useRef, aby auto-save neovlivnil rozbalení
+    const [expandedSchedules, setExpandedSchedules] = useState({});
+
+    const toggleSchedule = useCallback((index) => {
+        setExpandedSchedules(prev => ({ ...prev, [index]: !prev[index] }));
+    }, []);
+
+    // Funkce pro manipulaci s časovými bloky v harmonogramu dne
+    const handleScheduleBlockChange = useCallback((dateIndex, blockIndex, field, value) => {
+        updateFormData(prev => ({
+            ...prev,
+            dates: prev.dates.map((item, i) => {
+                if (i !== dateIndex) return item;
+                const blocks = [...(item.scheduleBlocks || [])];
+                blocks[blockIndex] = { ...blocks[blockIndex], [field]: value };
+                return { ...item, scheduleBlocks: blocks };
+            })
+        }));
+    }, []);
+
+    const addScheduleBlock = useCallback((dateIndex) => {
+        updateFormData(prev => ({
+            ...prev,
+            dates: prev.dates.map((item, i) => {
+                if (i !== dateIndex) return item;
+                const blocks = [...(item.scheduleBlocks || [])];
+                blocks.push({ timeFrom: '', timeTo: '', description: '' });
+                return { ...item, scheduleBlocks: blocks };
+            })
+        }));
+        // Automaticky rozbal harmonogram při přidání bloku
+        setExpandedSchedules(prev => ({ ...prev, [dateIndex]: true }));
+    }, []);
+
+    const removeScheduleBlock = useCallback((dateIndex, blockIndex) => {
+        updateFormData(prev => ({
+            ...prev,
+            dates: prev.dates.map((item, i) => {
+                if (i !== dateIndex) return item;
+                const blocks = (item.scheduleBlocks || []).filter((_, bi) => bi !== blockIndex);
+                return { ...item, scheduleBlocks: blocks };
+            })
+        }));
+    }, []);
 
     // --- Načtení globálních zranitelností ---
     useEffect(() => {
@@ -137,9 +195,18 @@ function ProjectBasic() {
                     documents: data.documents || [],
                     selectedVulnerabilities: data.selectedVulnerabilities || [],
                 };
-                setFormData(serverData);
-                latestDataRef.current = serverData;
-                if (saveStatus === 'Načteno') setSaveStatus('Uloženo');
+                // Nepřepisuj lokální data, pokud uživatel právě edituje (neuložené změny)
+                setSaveStatus(prev => {
+                    if (prev === 'Ukládám...') {
+                        // Máme neuložené lokální změny – nenahrazuj formData ze serveru,
+                        // jinak ztratíme lokální editace (např. datum)
+                        return prev;
+                    }
+                    setFormData(serverData);
+                    latestDataRef.current = serverData;
+                    if (prev === 'Načteno') return 'Uloženo';
+                    return prev;
+                });
             } else {
                 console.error("Projekt nenalezen!");
             }
@@ -312,10 +379,11 @@ function ProjectBasic() {
     };
 
     const handleDateChange = (index, e) => {
-        const { name, value } = e.target;
+        const { name, value, type, checked } = e.target;
+        const val = type === 'checkbox' ? checked : value;
         updateFormData(prev => ({
             ...prev,
-            dates: prev.dates.map((item, i) => i === index ? { ...item, [name]: value } : item)
+            dates: prev.dates.map((item, i) => i === index ? { ...item, [name]: val } : item)
         }));
     };
 
@@ -461,54 +529,198 @@ function ProjectBasic() {
             </section>
 
             <section>
-                <h2 className="text-xl font-semibold border-b pb-3 mb-6">Termíny a místa konání</h2>
-                <div className="space-y-4">
-                    {formData?.dates.map((item, index) => (
-                        <div key={index} className="flex items-center gap-4">
-                            <TextField label={`Datum akce ${index + 1}`} name="date" type="date" value={item.date} onChange={(e) => handleDateChange(index, e)} InputLabelProps={{ shrink: true }} variant="outlined" className="flex-1" />
-                            <TextField label={`Místo konání ${index + 1}`} name="location" value={item.location} onChange={(e) => handleDateChange(index, e)} variant="outlined" className="flex-1" />
-                            <IconButton onClick={() => removeDateRow(index)} color="secondary" disabled={formData.dates.length <= 1}><RemoveCircleOutline /></IconButton>
-                        </div>
-                    ))}
+                <h2 className="text-xl font-semibold border-b pb-3 mb-6">Termíny, místa a harmonogram</h2>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                    Zadejte dny konání akce. U každého dne můžete volitelně rozbalit detailní harmonogram s časovými bloky.
+                </Typography>
+                <div className="space-y-6">
+                    {formData?.dates.map((item, index) => {
+                        const blocks = item.scheduleBlocks || [];
+                        const isExpanded = expandedSchedules[index] || false;
+                        return (
+                            <Paper key={index} variant="outlined" sx={{ p: 2.5, borderRadius: 2 }}>
+                                <div className="flex items-center gap-4">
+                                    <TextField label={`Datum ${index + 1}`} name="date" type="date" value={item.date} onChange={(e) => handleDateChange(index, e)} InputLabelProps={{ shrink: true }} variant="outlined" sx={{ minWidth: 160 }} />
+                                    <TextField label="Místo konání" name="location" value={item.location || ''} onChange={(e) => handleDateChange(index, e)} variant="outlined" className="flex-1" />
+                                    <TextField label="Popis dne (nepovinné)" name="description" value={item.description || ''} onChange={(e) => handleDateChange(index, e)} variant="outlined" className="flex-1" />
+                                    {formData?.eventType === 'etapovy_cyklisticky_zavod' && (
+                                        <FormControlLabel
+                                            control={
+                                                <Checkbox
+                                                    checked={item.isTimeTrial || false}
+                                                    onChange={(e) => handleDateChange(index, { target: { name: 'isTimeTrial', value: e.target.checked, type: 'checkbox', checked: e.target.checked } })}
+                                                />
+                                            }
+                                            label="Časovka"
+                                            sx={{ whiteSpace: 'nowrap' }}
+                                        />
+                                    )}
+                                    <IconButton onClick={() => removeDateRow(index)} color="secondary" disabled={formData.dates.length <= 1} size="small"><DeleteOutline fontSize="small" /></IconButton>
+                                </div>
+
+                                {/* Detailní harmonogram dne */}
+                                <Box sx={{ mt: 1.5 }}>
+                                    <Button
+                                        size="small"
+                                        startIcon={<Schedule fontSize="small" />}
+                                        endIcon={<ExpandMore sx={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />}
+                                        onClick={() => toggleSchedule(index)}
+                                        sx={{ color: 'text.secondary', textTransform: 'none', fontWeight: 500 }}
+                                    >
+                                        Detailní harmonogram dne
+                                        {blocks.length > 0 && (
+                                            <Chip label={`${blocks.length} bloků`} size="small" sx={{ ml: 1, height: 20, fontSize: '0.7rem' }} />
+                                        )}
+                                    </Button>
+
+                                    <Collapse in={isExpanded}>
+                                        <Box sx={{ mt: 1.5, pl: 1, borderLeft: '3px solid #e0e0e0', ml: 1 }}>
+                                            {blocks.map((block, blockIndex) => (
+                                                <div key={blockIndex} className="flex items-center gap-2 mb-2">
+                                                    <TextField
+                                                        label="Od"
+                                                        type="time"
+                                                        value={block.timeFrom || ''}
+                                                        onChange={(e) => handleScheduleBlockChange(index, blockIndex, 'timeFrom', e.target.value)}
+                                                        InputLabelProps={{ shrink: true }}
+                                                        variant="outlined"
+                                                        size="small"
+                                                        sx={{ width: 110 }}
+                                                    />
+                                                    <TextField
+                                                        label="Do"
+                                                        type="time"
+                                                        value={block.timeTo || ''}
+                                                        onChange={(e) => handleScheduleBlockChange(index, blockIndex, 'timeTo', e.target.value)}
+                                                        InputLabelProps={{ shrink: true }}
+                                                        variant="outlined"
+                                                        size="small"
+                                                        sx={{ width: 110 }}
+                                                    />
+                                                    <TextField
+                                                        label="Popis aktivity"
+                                                        value={block.description || ''}
+                                                        onChange={(e) => handleScheduleBlockChange(index, blockIndex, 'description', e.target.value)}
+                                                        variant="outlined"
+                                                        size="small"
+                                                        className="flex-1"
+                                                    />
+                                                    <IconButton size="small" onClick={() => removeScheduleBlock(index, blockIndex)} color="secondary">
+                                                        <RemoveCircleOutline fontSize="small" />
+                                                    </IconButton>
+                                                </div>
+                                            ))}
+                                            <Button size="small" startIcon={<AddCircleOutline />} onClick={() => addScheduleBlock(index)} sx={{ mt: 0.5 }}>
+                                                Přidat časový blok
+                                            </Button>
+                                        </Box>
+                                    </Collapse>
+                                </Box>
+                            </Paper>
+                        );
+                    })}
                     <Button startIcon={<AddCircleOutline />} onClick={addDateRow}>Přidat další termín</Button>
                 </div>
             </section>
 
             <section>
                 <h2 className="text-2xl font-bold border-b pb-3 mb-6">Týmy podílející se na akci</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {teams.map((category, categoryIndex) => (
-                        <div key={category.title}>
-                            <Typography variant="h6" component="h3" className="font-semibold mb-2">{category.title}</Typography>
-                            <FormGroup>
-                                {category.teams.map((team, teamIndex) => (
-                                    <div key={teamIndex} className="flex items-center -ml-3">
-                                        <Checkbox
-                                            checked={formData?.involvedTeams?.[team] || false}
-                                            onChange={() => handleTeamToggle(team)}
-                                        />
-                                        <TextField
-                                            value={team}
-                                            onChange={(e) => handleTeamNameChange(categoryIndex, teamIndex, e.target.value)}
-                                            variant="standard"
-                                            fullWidth
-                                            sx={{ flexGrow: 1 }}
-                                        />
-                                        <IconButton size="small" onClick={() => handleRemoveTeam(categoryIndex, teamIndex)}>
-                                            <RemoveCircleOutline fontSize="small" />
-                                        </IconButton>
-                                    </div>
-                                ))}
+                        <Paper
+                            key={category.title}
+                            variant="outlined"
+                            sx={{ borderRadius: 3, overflow: 'hidden' }}
+                        >
+                            <Box sx={{
+                                display: 'flex', alignItems: 'center', gap: 1.5,
+                                px: 2.5, py: 1.5,
+                                backgroundColor: '#f8fafc',
+                                borderBottom: '1px solid #e2e8f0',
+                            }}>
+                                <Box sx={{ color: '#64748b', display: 'flex' }}>
+                                    {categoryIcons[category.icon] || <Groups />}
+                                </Box>
+                                <Typography variant="subtitle1" fontWeight={600} sx={{ color: '#334155' }}>
+                                    {category.title}
+                                </Typography>
+                            </Box>
+                            <Box sx={{ px: 1.5, py: 1 }}>
+                                {category.teams.map((team, teamIndex) => {
+                                    const isActive = formData?.involvedTeams?.[team] || false;
+                                    return (
+                                        <Box
+                                            key={teamIndex}
+                                            onClick={() => handleTeamToggle(team)}
+                                            sx={{
+                                                display: 'flex', alignItems: 'center', gap: 1,
+                                                px: 1.5, py: 0.75, mx: 0, my: 0.5,
+                                                borderRadius: 2,
+                                                cursor: 'pointer',
+                                                transition: 'all 0.15s ease',
+                                                backgroundColor: isActive ? '#eff6ff' : 'transparent',
+                                                border: '1px solid',
+                                                borderColor: isActive ? '#bfdbfe' : 'transparent',
+                                                '&:hover': {
+                                                    backgroundColor: isActive ? '#dbeafe' : '#f1f5f9',
+                                                },
+                                            }}
+                                        >
+                                            <Box sx={{
+                                                width: 20, height: 20, borderRadius: '6px',
+                                                border: '2px solid',
+                                                borderColor: isActive ? '#3b82f6' : '#cbd5e1',
+                                                backgroundColor: isActive ? '#3b82f6' : '#fff',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                transition: 'all 0.15s ease',
+                                                flexShrink: 0,
+                                            }}>
+                                                {isActive && (
+                                                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                                                        <path d="M2.5 6L5 8.5L9.5 3.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                                    </svg>
+                                                )}
+                                            </Box>
+                                            <TextField
+                                                value={team}
+                                                onChange={(e) => {
+                                                    e.stopPropagation();
+                                                    handleTeamNameChange(categoryIndex, teamIndex, e.target.value);
+                                                }}
+                                                onClick={(e) => e.stopPropagation()}
+                                                variant="standard"
+                                                fullWidth
+                                                InputProps={{
+                                                    disableUnderline: true,
+                                                    sx: { fontSize: '0.875rem', color: isActive ? '#1e40af' : '#475569' }
+                                                }}
+                                            />
+                                            <IconButton
+                                                size="small"
+                                                onClick={(e) => { e.stopPropagation(); handleRemoveTeam(categoryIndex, teamIndex); }}
+                                                sx={{ opacity: 0.3, '&:hover': { opacity: 1, color: '#ef4444' }, p: 0.5 }}
+                                            >
+                                                <Close sx={{ fontSize: 16 }} />
+                                            </IconButton>
+                                        </Box>
+                                    );
+                                })}
                                 <Button
                                     size="small"
-                                    startIcon={<AddCircleOutline />}
+                                    startIcon={<AddCircleOutline sx={{ fontSize: 18 }} />}
                                     onClick={() => handleAddNewTeam(categoryIndex)}
-                                    sx={{ mt: 1, justifyContent: 'flex-start' }}
+                                    sx={{
+                                        mt: 0.5, mb: 0.5, ml: 1,
+                                        textTransform: 'none',
+                                        color: '#94a3b8',
+                                        fontSize: '0.8rem',
+                                        '&:hover': { color: '#3b82f6', backgroundColor: 'transparent' }
+                                    }}
                                 >
                                     Přidat tým
                                 </Button>
-                            </FormGroup>
-                        </div>
+                            </Box>
+                        </Paper>
                     ))}
                 </div>
             </section>
