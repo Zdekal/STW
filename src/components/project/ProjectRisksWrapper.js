@@ -346,7 +346,18 @@ function ProjectRisksWrapper() {
             }
         }
 
-        return { ...modified, tags: baseTags };
+        // Uložit původní hodnoty, aby tabulka mohla zobrazit indikátor modifikace
+        const _base = {
+            availability: risk.availability,
+            occurrence: risk.occurrence,
+            complexity: risk.complexity,
+            lifeAndHealth: risk.lifeAndHealth,
+            facility: risk.facility,
+            financial: risk.financial,
+            community: risk.community,
+        };
+
+        return { ...modified, tags: baseTags, _base };
     });
 
     // Spočítej vliv lokalizací/načasování

@@ -784,46 +784,48 @@ export default function ProjectRisks({
                             </div>
                           )}
                         </td>
-                        <td className="px-1 py-2 text-center">
-                          <select value={r.availability || 1} onChange={(e) => handleSubfactorChange(r, 'availability', e.target.value)} className="border-gray-200 text-gray-600 rounded px-1 py-1 w-12 text-center shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
-                            {[1,2,3,4,5,6,7].map(v => <option key={v} value={v}>{v}</option>)}
-                          </select>
-                        </td>
-                        <td className="px-1 py-2 text-center">
-                          <select value={r.occurrence || 1} onChange={(e) => handleSubfactorChange(r, 'occurrence', e.target.value)} className="border-gray-200 text-gray-600 rounded px-1 py-1 w-12 text-center shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
-                            {[1,2,3,4,5,6,7].map(v => <option key={v} value={v}>{v}</option>)}
-                          </select>
-                        </td>
-                        <td className="px-1 py-2 text-center">
-                          <select value={r.complexity || 1} onChange={(e) => handleSubfactorChange(r, 'complexity', e.target.value)} className="border-gray-200 text-gray-600 rounded px-1 py-1 w-12 text-center shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
-                            {[1,2,3,4,5,6,7].map(v => <option key={v} value={v}>{v}</option>)}
-                          </select>
-                        </td>
+                        {['availability', 'occurrence', 'complexity'].map(field => {
+                          const base = r._base?.[field];
+                          const current = r[field] || 1;
+                          const diff = base != null ? current - base : 0;
+                          return (
+                            <td key={field} className="px-1 py-2 text-center relative">
+                              <select value={current} onChange={(e) => handleSubfactorChange(r, field, e.target.value)} className="border-gray-200 text-gray-600 rounded px-1 py-1 w-12 text-center shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                                {[1,2,3,4,5,6,7].map(v => <option key={v} value={v}>{v}</option>)}
+                              </select>
+                              {diff !== 0 && (
+                                <span title={`Modifikováno: ${diff > 0 ? '+' : ''}${diff} (základ: ${base})`} style={{ position: 'absolute', top: 2, right: 2, fontSize: 9, fontWeight: 700, lineHeight: 1, color: diff > 0 ? '#dc2626' : '#16a34a' }}>
+                                  {diff > 0 ? '▲' : '▼'}
+                                </span>
+                              )}
+                            </td>
+                          );
+                        })}
                         <td className="px-3 py-2 font-bold text-center border-l border-r border-blue-50 bg-blue-50/20 text-blue-900 tabular-nums">{r.probability}</td>
-                        <td className="px-1 py-2 text-center">
-                          <select value={r.lifeAndHealth || 1} onChange={(e) => handleSubfactorChange(r, 'lifeAndHealth', e.target.value)} className="border-gray-200 text-gray-600 rounded px-1 py-1 w-12 text-center shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
-                            {[1,2,3,4,5,6,7].map(v => <option key={v} value={v}>{v}</option>)}
-                          </select>
-                        </td>
-                        <td className="px-1 py-2 text-center">
-                          {isOutdoor ? (
-                            <span className="text-gray-400 font-medium cursor-not-allowed" title="Nevyplňuje se u venkovních akcí">—</span>
-                          ) : (
-                            <select value={r.facility || 1} onChange={(e) => handleSubfactorChange(r, 'facility', e.target.value)} className="border-gray-200 text-gray-600 rounded px-1 py-1 w-12 text-center shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
-                              {[1,2,3,4,5,6,7].map(v => <option key={v} value={v}>{v}</option>)}
-                            </select>
-                          )}
-                        </td>
-                        <td className="px-1 py-2 text-center">
-                          <select value={r.financial || 1} onChange={(e) => handleSubfactorChange(r, 'financial', e.target.value)} className="border-gray-200 text-gray-600 rounded px-1 py-1 w-12 text-center shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
-                            {[1,2,3,4,5,6,7].map(v => <option key={v} value={v}>{v}</option>)}
-                          </select>
-                        </td>
-                        <td className="px-1 py-2 text-center">
-                          <select value={r.community || 1} onChange={(e) => handleSubfactorChange(r, 'community', e.target.value)} className="border-gray-200 text-gray-600 rounded px-1 py-1 w-12 text-center shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
-                            {[1,2,3,4,5,6,7].map(v => <option key={v} value={v}>{v}</option>)}
-                          </select>
-                        </td>
+                        {['lifeAndHealth', 'facility', 'financial', 'community'].map(field => {
+                          if (field === 'facility' && isOutdoor) {
+                            return (
+                              <td key={field} className="px-1 py-2 text-center">
+                                <span className="text-gray-400 font-medium cursor-not-allowed" title="Nevyplňuje se u venkovních akcí">—</span>
+                              </td>
+                            );
+                          }
+                          const base = r._base?.[field];
+                          const current = r[field] || 1;
+                          const diff = base != null ? current - base : 0;
+                          return (
+                            <td key={field} className="px-1 py-2 text-center relative">
+                              <select value={current} onChange={(e) => handleSubfactorChange(r, field, e.target.value)} className="border-gray-200 text-gray-600 rounded px-1 py-1 w-12 text-center shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                                {[1,2,3,4,5,6,7].map(v => <option key={v} value={v}>{v}</option>)}
+                              </select>
+                              {diff !== 0 && (
+                                <span title={`Modifikováno: ${diff > 0 ? '+' : ''}${diff} (základ: ${base})`} style={{ position: 'absolute', top: 2, right: 2, fontSize: 9, fontWeight: 700, lineHeight: 1, color: diff > 0 ? '#dc2626' : '#16a34a' }}>
+                                  {diff > 0 ? '▲' : '▼'}
+                                </span>
+                              )}
+                            </td>
+                          );
+                        })}
                         <td className="px-3 py-2 font-bold text-center border-l border-r border-orange-50 bg-orange-50/20 text-orange-900 tabular-nums">{r.impact}</td>
                         <td className="px-3 py-2 font-black tabular-nums text-gray-900 text-center text-sm">{r.score}</td>
                         <td className="px-3 py-2 text-right space-x-2 whitespace-nowrap">
