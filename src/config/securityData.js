@@ -1,50 +1,6 @@
-// Import removed since it's now decoupled from newRisksValues logic for generating defaults
-export const allPossibleRisks = [
-    "Nepřátelské narušení akce / demonstrace / blokáda",
-    "Anonymní výhružka (hrozba závažným násilím / výbuchem)",
-    "Verbální konflikt",
-    "Rvačka / výtržnosti / obtěžování",
-    "Útok chladnou zbraní",
-    "Střelba",
-    "Žhářství",
-    "Uložení výbušniny",
-    "Výbuch",
-    "Závažný vandalismus",
-    "Únik škodlivé látky ve vzduchu",
-    "Sabotáž techniky",
-    "Nelegální použití pyrotechniky",
-    "Najetí vozidlem do davu",
-    "Extrémní vítr / bouřka",
-    "Přívalové srážky / lokální záplava",
-    "Úder blesku",
-    "Extrémní teplota",
-    "Davová panika a nekontrolovaný pohyb lidí",
-    "Větší počet zraněných osob (různými vlivy)",
-    "Mimořádně závažná událost v blízkosti akce",
-    "Dopravní kolaps dopravy v okolí akce",
-    "Srážka / hromadný pád závodníků",
-    "Vběhnutí diváka nebo zvířete na trať",
-    "Sabotáž trati (hřebíky, olej, překážky, natažený drát)",
-    "Ztráta dítěte",
-    "Nevhodné chování vůči dětem (obtěžování, agrese)",
-    "Kybernetický útok na AV/IT infrastrukturu",
-    "Zdravotní problémy",
-    "Požární poplach (skutečný i falešný)",
-    "Selhání evakuace (zablokované únikové cesty)",
-    "Pád / zřícení pódia, stage, stanu nebo jiné konstrukce",
-    "Elektrotechnická závada (zkrat, požár kabeláže)",
-    "Distribuce návykových látek",
-    "Střety skupin (hooligans, politika)",
-    "Vhazování předmětů na hrací plochu / trať",
-    "Invaze diváků na hrací plochu / trať",
-    "Rasistické / diskriminační projevy a incidenty",
-    "Kolaps bariér / zábran mezi sektory",
-    "Požár (stánky, dekorace, technické zázemí)",
-    "Padající stromy / velké větve při větru",
-    "Utonutí / pád do vody",
-    "Omezená / obtížná dostupnost ZZS (terén, vzdálenost)",
-    "Úpal, úžeh / Podchlazení"
-];
+// Odvozeno z defaultProjectRisksValues – jediný zdroj pravdy pro názvy rizik
+import { defaultProjectRisksValues } from './defaultProjectRisks';
+export const allPossibleRisks = defaultProjectRisksValues.map(r => r.name);
 
 
 /**

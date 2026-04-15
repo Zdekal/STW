@@ -96,6 +96,7 @@ function ProjectProcedures() {
 
         const projectDocRef = doc(db, 'projects', projectId);
         const unsubscribe = onSnapshot(projectDocRef, (docSnap) => {
+            if (docSnap.metadata.hasPendingWrites) return;
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 setCheckedRisks(data.customRisks || data.risks || []);

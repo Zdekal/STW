@@ -19,8 +19,9 @@ function CampusObjectLayout() {
         { to: `${basePath}/measures`, label: 'Opatření' },
         { to: `${basePath}/incident-log`, label: 'Evidence událostí' },
         { to: `${basePath}/documentation`, label: 'Bezpečnostní dokumentace' },
-        { to: `${basePath}/object-plan`, label: 'Bezpečnostní plán' },
         { to: `${basePath}/soft-target-card`, label: 'Karta objektu' },
+        { divider: true },
+        { to: `${basePath}/output-documents`, label: 'Výstupní dokumenty' },
     ];
 
     useEffect(() => {
@@ -84,16 +85,20 @@ function CampusObjectLayout() {
                     </Typography>
                 </Box>
                 <List component="nav" sx={{ flexGrow: 1, p: 1 }}>
-                    {navItems.map((item) => (
-                        <ListItemButton
-                            key={item.to}
-                            component={NavLink}
-                            to={item.to}
-                            end
-                            sx={{ borderRadius: '6px', mb: 0.5, '&.active': activeLinkStyle }}
-                        >
-                            <ListItemText primary={item.label} />
-                        </ListItemButton>
+                    {navItems.map((item, idx) => (
+                        item.divider ? (
+                            <Box key={`div-${idx}`} sx={{ my: 1, borderTop: '1px solid #e0e0e0' }} />
+                        ) : (
+                            <ListItemButton
+                                key={item.to}
+                                component={NavLink}
+                                to={item.to}
+                                end
+                                sx={{ borderRadius: '6px', mb: 0.5, '&.active': activeLinkStyle }}
+                            >
+                                <ListItemText primary={item.label} />
+                            </ListItemButton>
+                        )
                     ))}
                 </List>
             </Paper>

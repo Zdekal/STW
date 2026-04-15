@@ -12,7 +12,8 @@ function CampusLayout() {
         { to: `${basePath}/crisis-team`, label: 'Společný krizový tým' },
         { to: `${basePath}/central-incident-log`, label: 'Centrální záznam incidentů' },
         { to: `${basePath}/directives`, label: 'Bezpečnostní směrnice' },
-        { to: `${basePath}/plan`, label: 'Bezpečnostní plán' },
+        { divider: true },
+        { to: `${basePath}/output-documents`, label: 'Výstupní dokumenty' },
     ];
 
     const activeLinkStyle = {
@@ -30,16 +31,20 @@ function CampusLayout() {
                     </Typography>
                 </Box>
                 <List component="nav" sx={{ flexGrow: 1, p: 1 }}>
-                    {navItems.map((item) => (
-                        <ListItemButton
-                            key={item.to}
-                            component={NavLink}
-                            to={item.to}
-                            end
-                            sx={{ borderRadius: '6px', mb: 0.5, '&.active': activeLinkStyle }}
-                        >
-                            <ListItemText primary={item.label} />
-                        </ListItemButton>
+                    {navItems.map((item, idx) => (
+                        item.divider ? (
+                            <Box key={`div-${idx}`} sx={{ my: 1, borderTop: '1px solid #e0e0e0' }} />
+                        ) : (
+                            <ListItemButton
+                                key={item.to}
+                                component={NavLink}
+                                to={item.to}
+                                end
+                                sx={{ borderRadius: '6px', mb: 0.5, '&.active': activeLinkStyle }}
+                            >
+                                <ListItemText primary={item.label} />
+                            </ListItemButton>
+                        )
                     ))}
                 </List>
                 <div style={{ marginTop: 'auto', borderTop: '1px solid #ddd', padding: '8px' }}>

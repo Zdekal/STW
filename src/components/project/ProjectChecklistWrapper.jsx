@@ -156,6 +156,14 @@ const ProjectChecklist = ({ projectId: propProjectId, audienceSize: propAudience
             pushItem('stankari_komunikace', 'Urči osobu zodpovědnou za komunikaci se stánkaři.', 'Ať si připraví aktuální kontaktovník na stánkaře pro případ krizových situací.', 'Přípravná fáze');
         }
 
+        // --- PRAVIDLA PRO ČASOVKU (etapový cyklistický závod) ---
+        const dates = projectData.dates || [];
+        const hasTimeTrial = dates.some(d => d.isTimeTrial);
+        if (hasTimeTrial && eventType === 'etapovy_cyklisticky_zavod') {
+            pushItem('tt_risky_spots', 'Pro časovku identifikuj riziková místa kolize s chodci a vozidly (výjezdy z parkoviště OC, benzínových stanic)', 'Při časovce je zvýšené riziko kolize cyklistů s chodci a vozidly na místech, kde křižují běžný provoz.', 'Přípravná fáze');
+            pushItem('tt_briefing_poradatele', 'Briefing pořadatelů – Upozornit na rizika kolize s chodci a vozidly při časovce, zejména výjezdy z parkovišť OC a benzínových stanic', 'V rámci briefingu pořadatelů je nutné zdůraznit specifická rizika časovky.', 'Těsně před akcí');
+        }
+
         // --- PRAVIDLA PODLE BEZPEČNOSTNÍCH OPATŘENÍ ---
         const selectedMeasuresObj = projectData.selectedMeasures || projectData.measures || {};
 

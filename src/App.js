@@ -17,7 +17,6 @@ import UserManagement from "./components/UserManagement";
 import GlobalObjectThreats from "./components/admin/GlobalObjectThreats";
 import GlobalProjectRisks from "./components/admin/GlobalProjectRisks";
 import ProjectRiskMapping from "./components/ProjectRiskMapping";
-import UserProjectRisks from "./components/user/UserProjectRisks";
 // Pokud tenhle soubor ještě nemáš, vytvoř ho nebo tu trasu dočasně smaž:
 import AdminDashboard from "./components/admin/AdminDashboard";
 
@@ -70,11 +69,7 @@ function App() {
         {/* Běžné chráněné stránky */}
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/settings" element={<Settings />} />
-        <Route path="/settings/my-project-risks" element={<UserProjectRisks />} />
         <Route path="/help" element={<Help />} />
-
-        {/* Pokud máš router pro projekty */}
-        <Route path="/project/:id/*" element={<ProjectRouter />} />
 
         {/* Admin-only stránky (role guard přímo na elementu) */}
         <Route
@@ -118,6 +113,16 @@ function App() {
           }
         />
       </Route>
+
+      {/* Projekt má vlastní layout (ProjectLayout/ObjectLayout/CampusLayout) se svým sidebarem */}
+      <Route
+        path="/project/:id/*"
+        element={
+          <ProtectedRoute>
+            <ProjectRouter />
+          </ProtectedRoute>
+        }
+      />
 
       {/* Samostatná admin homepage (mimo layout, pokud chceš) */}
       <Route

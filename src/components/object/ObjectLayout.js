@@ -9,8 +9,9 @@ const navItems = [
     { to: 'risks', label: 'Rizika' },
     { to: 'measures', label: 'Opatření' },
     { to: 'directives', label: 'Bezpečnostní směrnice' },
-    { to: 'plan', label: 'Bezpečnostní plán' },
     { to: 'soft-target-card', label: 'Karta objektu' },
+    { divider: true },
+    { to: 'output-documents', label: 'Výstupní dokumenty' },
 ];
 
 function ObjectLayout() {
@@ -26,10 +27,14 @@ function ObjectLayout() {
                     </Typography>
                 </Box>
                 <List component="nav" sx={{ flexGrow: 1 }}>
-                    {navItems.map((item) => (
-                        <ListItemButton key={item.to} component={NavLink} to={`${basePath}/${item.to}`} end>
-                            <ListItemText primary={item.label} />
-                        </ListItemButton>
+                    {navItems.map((item, idx) => (
+                        item.divider ? (
+                            <Box key={`div-${idx}`} sx={{ my: 1, borderTop: '1px solid #e0e0e0' }} />
+                        ) : (
+                            <ListItemButton key={item.to} component={NavLink} to={`${basePath}/${item.to}`} end>
+                                <ListItemText primary={item.label} />
+                            </ListItemButton>
+                        )
                     ))}
                 </List>
                 <div style={{ marginTop: 'auto', borderTop: '1px solid #ddd', padding: '8px' }}>

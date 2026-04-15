@@ -70,8 +70,7 @@ function ProjectMeasures() {
                 const lp = listProjects().find(p => p.id === projectId);
                 if (lp) {
                     setCheckedRisks(lp.customRisks || lp.risks || []);
-                    setSelectedMeasures(lp.selectedMeasures || {});
-                    setSelectedMeasures(lp.measures || {});
+                    setSelectedMeasures(lp.selectedMeasures || lp.measures || {});
                 } else {
                     console.error("Lokální projekt nenalezen!");
                 }
@@ -87,6 +86,7 @@ function ProjectMeasures() {
 
         const projectDocRef = doc(db, 'projects', projectId);
         const unsubscribe = onSnapshot(projectDocRef, (docSnap) => {
+            if (docSnap.metadata.hasPendingWrites) return; // Ignoruj lokální zápisy
             if (docSnap.exists()) {
                 const data = docSnap.data();
                 setCheckedRisks(data.customRisks || data.risks || []);
