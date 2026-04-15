@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { db } from '../../firebase';
 import { doc, getDoc, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
@@ -9,6 +9,12 @@ import { useAuth } from '../../context/AuthContext';
 import { v4 as uuidv4 } from 'uuid';
 import { generateInitialRisks } from '../../lib/risks/riskGenerator';
 import { applyModifiers } from '../../lib/risks';
+import { getLocationTimingConfig, locationTimingToVulnerabilities, computeLocationTimingImpact } from '../../config/locationTimingData';
+
+// Zranitelnosti nevhodné pro venkovní akce
+const OUTDOOR_EXCLUDED_VULNS = [
+    "Nelze využít evakuační rozhlas",
+];
 
 function ProjectRisksWrapper() {
     const { id: projectId } = useParams();
@@ -22,6 +28,13 @@ function ProjectRisksWrapper() {
     const [timingSpecifics, setTimingSpecifics] = useState('');
     const [globalVulnerabilities, setGlobalVulnerabilities] = useState([]);
     const [selectedVulnerabilities, setSelectedVulnerabilities] = useState([]);
+    const [eventType, setEventType] = useState('');
+    const [projectDates, setProjectDates] = useState([]);
+    // Location/Timing state
+    const [activeLocationTimings, setActiveLocationTimings] = useState([]);
+    const [customLocationTimings, setCustomLocationTimings] = useState([]);
+
+    const isOutdoor = environmentType === 'venkovní' || environmentType === 'vnější';
 
     // Načtení globálních zranitelností
     useEffect(() => {
@@ -37,6 +50,15 @@ function ProjectRisksWrapper() {
         fetchVulns();
     }, []);
 
+    // Filtrovaná zranitelnosti - vyloučit nevhodné pro venkovní
+    const filteredVulnerabilities = useMemo(() => {
+        if (!isOutdoor) return globalVulnerabilities;
+        return globalVulnerabilities.filter(v => !OUTDOOR_EXCLUDED_VULNS.includes(v.name));
+    }, [globalVulnerabilities, isOutdoor]);
+
+    // Konfigurace lokalizace/načasování pro daný typ akce
+    const locationTimingConfig = useMemo(() => getLocationTimingConfig(eventType), [eventType]);
+
     useEffect(() => {
         if (!projectId) return;
 
@@ -45,7 +67,7 @@ function ProjectRisksWrapper() {
         const initializeAndListen = async () => {
             if (projectId.startsWith('local-')) {
                 // LocalStore verze
-                import('../../services/localStore').then(async ({ listProjects, updateProject }) => { // <--- Added async
+                import('../../services/localStore').then(async ({ listProjects, updateProject }) => {
                     const existing = listProjects().find(p => p.id === projectId);
                     if (existing) {
                         setEnvironmentType(existing.environmentType || 'kombinovaná');
@@ -53,14 +75,14 @@ function ProjectRisksWrapper() {
                         setLocationSpecifics(existing.locationSpecifics || '');
                         setTimingSpecifics(existing.timingSpecifics || '');
                         setSelectedVulnerabilities(existing.selectedVulnerabilities || []);
+                        setEventType(existing.eventType || '');
+                        setProjectDates(existing.dates || []);
+                        setActiveLocationTimings(existing.activeLocationTimings || []);
+                        setCustomLocationTimings(existing.customLocationTimings || []);
                         const hasDefaults = existing.customRisks && existing.customRisks.some(r => r.id && r.id.startsWith("risk-default"));
                         if (!existing.customRisks || existing.customRisks.length === 0 || (!hasDefaults && existing.customRisks.length < 5)) {
-                            // Je to buď úplně prázdné, nebo starý legacy projekt
-                            const initRisks = await generateInitialRisks(currentUser?.uid, existing); 
-
-                            // Zahovej jakákoliv existující custom rizika
+                            const initRisks = await generateInitialRisks(currentUser?.uid, existing, globalVulnerabilities);
                             const merged = existing.customRisks ? [...initRisks, ...existing.customRisks] : initRisks;
-
                             updateProject({ ...existing, customRisks: merged });
                             setProjectRisks(merged);
                         } else {
@@ -83,21 +105,19 @@ function ProjectRisksWrapper() {
             const projectRef = doc(db, 'projects', projectId);
 
             try {
-                // Skontrolujeme a případně zkusíme inicializovat
                 const docSnap = await getDoc(projectRef);
                 if (docSnap.exists()) {
                     const data = docSnap.data();
                     const hasDefaults = data.customRisks && data.customRisks.some(r => r.id && r.id.startsWith("risk-default"));
 
                     if (!data.customRisks || data.customRisks.length === 0 || (!hasDefaults && data.customRisks.length < 5)) {
-                        const initRisks = await generateInitialRisks(currentUser?.uid, data); 
+                        const initRisks = await generateInitialRisks(currentUser?.uid, data, globalVulnerabilities);
                         const merged = data.customRisks ? [...initRisks, ...data.customRisks] : initRisks;
 
                         await setDoc(projectRef, {
                             customRisks: merged,
                             customRisksInitialized: serverTimestamp()
                         }, { merge: true });
-                        // Firebase listener nás zachytí
                     }
                 } else {
                     setError('Projekt nebyl nalezen.');
@@ -111,6 +131,7 @@ function ProjectRisksWrapper() {
 
             // Real-time listener
             const unsubscribe = onSnapshot(projectRef, (docSnap) => {
+                if (docSnap.metadata.hasPendingWrites) return;
                 if (docSnap.exists()) {
                     const data = docSnap.data();
                     setEnvironmentType(data.environmentType || 'kombinovaná');
@@ -119,6 +140,10 @@ function ProjectRisksWrapper() {
                     setLocationSpecifics(data.locationSpecifics || '');
                     setTimingSpecifics(data.timingSpecifics || '');
                     setSelectedVulnerabilities(data.selectedVulnerabilities || []);
+                    setEventType(data.eventType || '');
+                    setProjectDates(data.dates || []);
+                    setActiveLocationTimings(data.activeLocationTimings || []);
+                    setCustomLocationTimings(data.customLocationTimings || []);
                 }
                 setLoading(false);
             }, (err) => {
@@ -133,56 +158,100 @@ function ProjectRisksWrapper() {
         let unsub = () => { };
         initializeAndListen().then(res => { if (typeof res === 'function') unsub = res; });
         return () => unsub();
-    }, [projectId, generateInitialRisks, currentUser]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [projectId, currentUser]);
+
+    // Automatická správa rizika časovky
+    const TIME_TRIAL_RISK_ID = 'risk-time-trial-collision';
+    const TIME_TRIAL_RISK_NAME = 'Kolize cyklistů s netrpělivými chodci a vozidly (zejména parkoviště OC, benzínové stanice)';
+
+    useEffect(() => {
+        if (loading) return;
+        const hasTimeTrial = eventType === 'etapovy_cyklisticky_zavod' && projectDates.some(d => d.isTimeTrial);
+        const existingIdx = projectRisks.findIndex(r => r.id === TIME_TRIAL_RISK_ID);
+
+        if (hasTimeTrial && existingIdx === -1) {
+            const newRisk = {
+                id: TIME_TRIAL_RISK_ID,
+                name: TIME_TRIAL_RISK_NAME,
+                probability: 12,
+                impact: 10,
+                availability: 5, occurrence: 4, complexity: 3,
+                lifeAndHealth: 4, facility: 1, financial: 2, community: 3,
+                tags: ['Časovka'],
+            };
+            const updated = [...projectRisks, newRisk];
+            handleUpdateRisks(updated);
+        } else if (!hasTimeTrial && existingIdx !== -1) {
+            const updated = projectRisks.filter(r => r.id !== TIME_TRIAL_RISK_ID);
+            handleUpdateRisks(updated);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [eventType, projectDates, loading]);
+
+    // ── Persistence helpers ──
+
+    const saveField = async (fields) => {
+        if (projectId.startsWith('local-')) {
+            import('../../services/localStore').then(({ listProjects, updateProject }) => {
+                const existing = listProjects().find(p => p.id === projectId);
+                if (existing) {
+                    updateProject({ ...existing, ...fields, lastModified: new Date().toISOString() });
+                }
+            });
+            return;
+        }
+        if (db) {
+            const projectRef = doc(db, 'projects', projectId);
+            await setDoc(projectRef, { ...fields, lastEdited: serverTimestamp() }, { merge: true });
+        }
+    };
+
+    const handleToggleVulnerability = async (vulnId) => {
+        const newSelected = selectedVulnerabilities.includes(vulnId)
+            ? selectedVulnerabilities.filter(id => id !== vulnId)
+            : [...selectedVulnerabilities, vulnId];
+        setSelectedVulnerabilities(newSelected);
+        await saveField({ selectedVulnerabilities: newSelected });
+    };
+
+    const handleToggleLocationTiming = async (ltId) => {
+        const newActive = activeLocationTimings.includes(ltId)
+            ? activeLocationTimings.filter(id => id !== ltId)
+            : [...activeLocationTimings, ltId];
+        setActiveLocationTimings(newActive);
+        await saveField({ activeLocationTimings: newActive });
+    };
+
+    const handleAddCustomLocationTiming = async (item) => {
+        const newCustom = [...customLocationTimings, item];
+        const newActive = [...activeLocationTimings, item.id];
+        setCustomLocationTimings(newCustom);
+        setActiveLocationTimings(newActive);
+        await saveField({ customLocationTimings: newCustom, activeLocationTimings: newActive });
+    };
+
+    const handleRemoveCustomLocationTiming = async (itemId) => {
+        const newCustom = customLocationTimings.filter(c => c.id !== itemId);
+        const newActive = activeLocationTimings.filter(id => id !== itemId);
+        setCustomLocationTimings(newCustom);
+        setActiveLocationTimings(newActive);
+        await saveField({ customLocationTimings: newCustom, activeLocationTimings: newActive });
+    };
 
     const handleUpdateSpecifics = async (field, value) => {
         if (field === 'locationSpecifics') setLocationSpecifics(value);
         if (field === 'timingSpecifics') setTimingSpecifics(value);
-
-        if (projectId.startsWith('local-')) {
-            import('../../services/localStore').then(({ listProjects, updateProject }) => {
-                const existing = listProjects().find(p => p.id === projectId);
-                if (existing) {
-                    updateProject({ ...existing, [field]: value, lastModified: new Date().toISOString() });
-                }
-            });
-            return;
-        }
-
-        if (db) {
-            const projectRef = doc(db, 'projects', projectId);
-            await setDoc(projectRef, {
-                [field]: value,
-                lastEdited: serverTimestamp()
-            }, { merge: true });
-        }
+        await saveField({ [field]: value });
     };
 
     const handleUpdateRisks = async (updatedRisks) => {
         setProjectRisks(updatedRisks);
-
-        if (projectId.startsWith('local-')) {
-            import('../../services/localStore').then(({ listProjects, updateProject }) => {
-                const existing = listProjects().find(p => p.id === projectId);
-                if (existing) {
-                    updateProject({ ...existing, customRisks: updatedRisks, lastModified: new Date().toISOString() });
-                }
-            });
-            return;
-        }
-
-        if (db) {
-            const projectRef = doc(db, 'projects', projectId);
-            await setDoc(projectRef, {
-                customRisks: updatedRisks,
-                lastEdited: serverTimestamp()
-            }, { merge: true });
-        }
+        await saveField({ customRisks: updatedRisks });
     };
 
     const handleCreateRisk = async (newRiskData) => {
         const pTotal = (Number(newRiskData.availability) || 1) + (Number(newRiskData.occurrence) || 1) + (Number(newRiskData.complexity) || 1);
-        const isOutdoor = environmentType === 'venkovní' || environmentType === 'vnější';
         const facilityImpact = isOutdoor ? 0 : (Number(newRiskData.facility) || 1);
         const dTotal = (Number(newRiskData.lifeAndHealth) || 1) + facilityImpact + (Number(newRiskData.financial) || 1) + (Number(newRiskData.community) || 1);
 
@@ -208,7 +277,6 @@ function ProjectRisksWrapper() {
             if (r.id === id) {
                 const merged = { ...r, ...updatedData };
                 const pTotal = (Number(merged.availability) || 1) + (Number(merged.occurrence) || 1) + (Number(merged.complexity) || 1);
-                const isOutdoor = environmentType === 'venkovní' || environmentType === 'vnější';
                 const facilityImpact = isOutdoor ? 0 : (Number(merged.facility) || 1);
                 const dTotal = (Number(merged.lifeAndHealth) || 1) + facilityImpact + (Number(merged.financial) || 1) + (Number(merged.community) || 1);
                 return {
@@ -231,9 +299,59 @@ function ProjectRisksWrapper() {
     if (loading) return <Box p={8} display="flex" justifyContent="center"><CircularProgress /></Box>;
     if (error) return <Box p={4}><Alert severity="error">{error}</Alert></Box>;
 
-    // Aplikuj modifikátory zranitelností na rizika projektu
-    const risksWithModifiers = projectRisks.map(risk =>
-        applyModifiers(risk, selectedVulnerabilities, globalVulnerabilities)
+    // Převod aktivních lokalizací/načasování na pseudo-zranitelnosti
+    const ltPseudoVulns = locationTimingToVulnerabilities(activeLocationTimings, locationTimingConfig, customLocationTimings);
+
+    // Kombinuj reálné zranitelnosti + pseudo-zranitelnosti z lokalizací/načasování
+    const allVulnerabilities = [...filteredVulnerabilities, ...ltPseudoVulns];
+    const allActiveVulnIds = [...selectedVulnerabilities, ...activeLocationTimings.filter(id => ltPseudoVulns.some(v => v.id === id))];
+
+    // Aplikuj modifikátory na rizika projektu
+    const risksWithModifiers = projectRisks.map(risk => {
+        const modified = applyModifiers(risk, allActiveVulnIds, allVulnerabilities);
+
+        // Dynamicky přidej/odeber tagy
+        const baseTags = (risk.tags || []).filter(t =>
+            !t.includes('Modifikováno ze specifik') && !t.includes('Přímý přenos') &&
+            !t.includes('Lokalizace') && !t.includes('Načasování')
+        );
+
+        // Tag pro zranitelnosti
+        if (selectedVulnerabilities.length > 0 && filteredVulnerabilities.length > 0) {
+            let totalMod = 0;
+            for (const vuln of filteredVulnerabilities) {
+                if (!selectedVulnerabilities.includes(vuln.id)) continue;
+                for (const target of (vuln.targets || [])) {
+                    const matches = target.riskId ? target.riskId === risk.id : target.riskName === risk.name;
+                    if (!matches) continue;
+                    totalMod += Object.values(target.modifiers || {}).reduce((s, v) => s + v, 0);
+                }
+            }
+            if (totalMod !== 0) {
+                baseTags.push(`Modifikováno ze specifik akce (${totalMod > 0 ? '+' : ''}${totalMod})`);
+            }
+        }
+
+        // Tag pro lokalizace/načasování
+        if (ltPseudoVulns.length > 0) {
+            let ltMod = 0;
+            for (const pv of ltPseudoVulns) {
+                for (const target of (pv.targets || [])) {
+                    if (target.riskName !== risk.name) continue;
+                    ltMod += Object.values(target.modifiers || {}).reduce((s, v) => s + v, 0);
+                }
+            }
+            if (ltMod !== 0) {
+                baseTags.push(`Lokalizace/Načasování (${ltMod > 0 ? '+' : ''}${ltMod})`);
+            }
+        }
+
+        return { ...modified, tags: baseTags };
+    });
+
+    // Spočítej vliv lokalizací/načasování
+    const locationTimingImpact = computeLocationTimingImpact(
+        activeLocationTimings, locationTimingConfig, projectRisks, isOutdoor
     );
 
     return (
@@ -248,7 +366,15 @@ function ProjectRisksWrapper() {
             onUpdateRisk={handleUpdateRisk}
             onDeleteRisk={handleDeleteRisk}
             activeVulnerabilities={selectedVulnerabilities}
-            globalVulnerabilities={globalVulnerabilities}
+            globalVulnerabilities={filteredVulnerabilities}
+            onToggleVulnerability={handleToggleVulnerability}
+            locationTimingConfig={locationTimingConfig}
+            activeLocationTimings={activeLocationTimings}
+            onToggleLocationTiming={handleToggleLocationTiming}
+            customLocationTimings={customLocationTimings}
+            onAddCustomLocationTiming={handleAddCustomLocationTiming}
+            onRemoveCustomLocationTiming={handleRemoveCustomLocationTiming}
+            locationTimingImpact={locationTimingImpact}
         />
     );
 }

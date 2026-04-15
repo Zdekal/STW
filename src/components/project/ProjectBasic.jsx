@@ -67,6 +67,7 @@ function ProjectBasic() {
     const [metaLoading, setMetaLoading] = useState(true);
 
     const latestDataRef = useRef(null);
+    const lastSaveTime = useRef(0);
 
     // Stav rozbalení detailního harmonogramu - v useRef, aby auto-save neovlivnil rozbalení
     const [expandedSchedules, setExpandedSchedules] = useState({});
@@ -195,11 +196,14 @@ function ProjectBasic() {
                     documents: data.documents || [],
                     selectedVulnerabilities: data.selectedVulnerabilities || [],
                 };
-                // Nepřepisuj lokální data, pokud uživatel právě edituje (neuložené změny)
+                // Nepřepisuj lokální data, pokud uživatel právě edituje nebo jsme právě uložili
+                // (onSnapshot po uložení může přijít se zpožděním a přepsat lokální změny)
+                const timeSinceLastSave = Date.now() - lastSaveTime.current;
                 setSaveStatus(prev => {
-                    if (prev === 'Ukládám...') {
-                        // Máme neuložené lokální změny – nenahrazuj formData ze serveru,
-                        // jinak ztratíme lokální editace (např. datum)
+                    if (prev === 'Ukládám...' || timeSinceLastSave < 3000) {
+                        // Buď máme neuložené změny, nebo právě proběhlo uložení —
+                        // nenahrazuj formData, jinak ztratíme lokální editace (např. datum)
+                        if (prev === 'Načteno') return 'Uloženo';
                         return prev;
                     }
                     setFormData(serverData);
@@ -267,6 +271,7 @@ function ProjectBasic() {
                     import('../../services/localStore').then(({ listProjects, updateProject }) => {
                         const existing = listProjects().find(p => p.id === projectId) || {};
                         updateProject({ ...existing, ...latestDataRef.current });
+                        lastSaveTime.current = Date.now();
                         setSaveStatus('Uloženo');
                     });
                     return;
@@ -275,6 +280,7 @@ function ProjectBasic() {
                 if (!db) return;
                 const projectRef = doc(db, 'projects', projectId);
                 await setDoc(projectRef, { ...latestDataRef.current, lastEdited: serverTimestamp() }, { merge: true });
+                lastSaveTime.current = Date.now();
                 setSaveStatus('Uloženo');
             } catch (error) {
                 console.error("Chyba při automatickém ukládání: ", error);

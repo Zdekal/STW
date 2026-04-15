@@ -142,16 +142,29 @@ function generateBasicInfo(project) {
 function generateRiskSummary(project) {
     const items = [];
     const risks = project.customRisks || [];
+    const isOutdoor = project.environmentType === 'venkovní' || project.environmentType === 'vnější';
+
     items.push(para('Hodnocení ohroženosti bylo provedeno na základě metodiky Ministerstva vnitra ČR pro ochranu měkkých cílů.'));
     items.push(para(`Celkem bylo identifikováno ${risks.length} rizik.`));
 
+    // Poznámka o dopadu na techniku/objekt
+    if (isOutdoor) {
+        items.push(emptyLine());
+        items.push(para('Poznámka k hodnocení dopadu na techniku a objekt:', { bold: true }));
+        items.push(para('Při hodnocení dopadu incidentu na techniku a objekt u venkovních akcí pracujeme s verzí, že objekt (budova, sportoviště) je ve vlastnictví soukromého subjektu, který ponese dopad na budovu sám. Pořadatel akce proto řeší pouze dopad na vlastní techniku (nikoli na budovu/objekt). Z tohoto důvodu je subfaktor „Technika/Objekt" u venkovních akcí vynechán z výpočtu dopadu.'));
+    }
+
     if (risks.length > 0) {
+        const computeScore = (r) => {
+            const pSum = (Number(r.availability) || 1) + (Number(r.occurrence) || 1) + (Number(r.complexity) || 1);
+            const dSum = (Number(r.lifeAndHealth) || 1) + (isOutdoor ? 0 : (Number(r.facility) || 1)) + (Number(r.financial) || 1) + (Number(r.community) || 1);
+            return { pSum, dSum, score: pSum * dSum };
+        };
+
         // Spočítat rizika podle pásem
         const bandCounts = { low: 0, medium: 0, high: 0, critical: 0 };
         risks.forEach(r => {
-            const pSum = (Number(r.availability) || 1) + (Number(r.occurrence) || 1) + (Number(r.complexity) || 1);
-            const dSum = (Number(r.lifeAndHealth) || 1) + (Number(r.facility) || 1) + (Number(r.financial) || 1) + (Number(r.community) || 1);
-            const score = pSum * dSum;
+            const { score } = computeScore(r);
             const band = toBand(score, SUBFACTOR_BANDS);
             if (band) bandCounts[band.id] = (bandCounts[band.id] || 0) + 1;
         });
@@ -163,18 +176,42 @@ function generateRiskSummary(project) {
         items.push(bulletItem(`Nízká: ${bandCounts.low}`));
 
         // Prioritní rizika (top 5 by score)
-        const sorted = [...risks].sort((a, b) => {
-            const scoreA = ((Number(a.availability)||1)+(Number(a.occurrence)||1)+(Number(a.complexity)||1)) * ((Number(a.lifeAndHealth)||1)+(Number(a.facility)||1)+(Number(a.financial)||1)+(Number(a.community)||1));
-            const scoreB = ((Number(b.availability)||1)+(Number(b.occurrence)||1)+(Number(b.complexity)||1)) * ((Number(b.lifeAndHealth)||1)+(Number(b.facility)||1)+(Number(b.financial)||1)+(Number(b.community)||1));
-            return scoreB - scoreA;
-        });
+        const sorted = [...risks].sort((a, b) => computeScore(b).score - computeScore(a).score);
         items.push(emptyLine());
         items.push(heading3('Prioritní rizika'));
         sorted.slice(0, 5).forEach((r, i) => {
-            const pSum = (Number(r.availability)||1)+(Number(r.occurrence)||1)+(Number(r.complexity)||1);
-            const dSum = (Number(r.lifeAndHealth)||1)+(Number(r.facility)||1)+(Number(r.financial)||1)+(Number(r.community)||1);
-            items.push(bulletItem(`${i + 1}. ${r.name} (skóre: ${pSum * dSum})`));
+            const { score } = computeScore(r);
+            items.push(bulletItem(`${i + 1}. ${r.name} (skóre: ${score})`));
         });
+
+        // Nejpravděpodobnější a nejvyšší dopad
+        const byProbability = [...risks].sort((a, b) => computeScore(b).pSum - computeScore(a).pSum);
+        const byImpact = [...risks].sort((a, b) => computeScore(b).dSum - computeScore(a).dSum);
+
+        items.push(emptyLine());
+        items.push(heading3('Celkové hodnocení'));
+        items.push(bulletItem(`Nejpravděpodobnější incident: ${byProbability[0]?.name} (P = ${computeScore(byProbability[0]).pSum})`));
+        items.push(bulletItem(`Incident s nejvyšším dopadem: ${byImpact[0]?.name} (D = ${computeScore(byImpact[0]).dSum})`));
+        items.push(bulletItem(`Nejrizikovější incident celkově: ${sorted[0]?.name} (skóre = ${computeScore(sorted[0]).score})`));
+
+        // Lokalizace a načasování vliv
+        try {
+            const { getLocationTimingConfig, computeLocationTimingImpact } = require('../config/locationTimingData');
+            const ltConfig = getLocationTimingConfig(project.eventType);
+            const activeLocTimings = project.activeLocationTimings || [];
+            if (ltConfig && activeLocTimings.length > 0) {
+                const impact = computeLocationTimingImpact(activeLocTimings, ltConfig, risks, isOutdoor);
+                const locImpact = impact.filter(i => i.type === 'location' && i.totalImpact > 0).sort((a, b) => b.totalImpact - a.totalImpact);
+                const timeImpact = impact.filter(i => i.type === 'timing' && i.totalImpact > 0).sort((a, b) => b.totalImpact - a.totalImpact);
+
+                if (locImpact.length > 0) {
+                    items.push(bulletItem(`Nejrizikovější lokalizace: ${locImpact[0].name} (+${locImpact[0].totalImpact} bodů)`));
+                }
+                if (timeImpact.length > 0) {
+                    items.push(bulletItem(`Nejrizikovější načasování: ${timeImpact[0].name} (+${timeImpact[0].totalImpact} bodů)`));
+                }
+            }
+        } catch (e) { /* no location/timing data */ }
     } else {
         items.push(placeholderPara('Přidejte rizika v sekci Zvažovaná rizika'));
     }
@@ -217,6 +254,77 @@ function generateVulnerabilities(project) {
 
 function generateLocationTimingSpecifics(project) {
     const items = [];
+    const activeLocTimings = project.activeLocationTimings || [];
+    const customLocTimings = project.customLocationTimings || [];
+    const isOutdoor = project.environmentType === 'venkovní' || project.environmentType === 'vnější';
+
+    // Pokud máme strukturovaná data (checkboxy)
+    let ltConfig = null;
+    try {
+        const { getLocationTimingConfig, computeLocationTimingImpact } = require('../config/locationTimingData');
+        ltConfig = getLocationTimingConfig(project.eventType);
+
+        if (ltConfig && activeLocTimings.length > 0) {
+            const allLocations = [...(ltConfig.locations || []), ...customLocTimings.filter(c => c.type === 'location')];
+            const allTimings = [...(ltConfig.timings || []), ...customLocTimings.filter(c => c.type === 'timing')];
+            const activeLocations = allLocations.filter(l => activeLocTimings.includes(l.id));
+            const activeTimingsItems = allTimings.filter(t => activeLocTimings.includes(t.id));
+
+            items.push(heading3('Specifikace lokalizace rizik'));
+            if (activeLocations.length > 0) {
+                items.push(para('Pro analýzu byly vybrány následující lokalizace:'));
+                activeLocations.forEach(l => items.push(bulletItem(l.name)));
+            } else {
+                items.push(para('Nebyly specifikovány konkrétní lokalizace.'));
+            }
+
+            items.push(emptyLine());
+            items.push(heading3('Specifikace načasování rizik'));
+            if (activeTimingsItems.length > 0) {
+                items.push(para('Pro analýzu byla vybrána následující načasování:'));
+                activeTimingsItems.forEach(t => items.push(bulletItem(t.name)));
+            } else {
+                items.push(para('Nebyla specifikována konkrétní načasování.'));
+            }
+
+            // Celkové hodnocení vlivu
+            const impact = computeLocationTimingImpact(activeLocTimings, ltConfig, project.customRisks || [], isOutdoor);
+            if (impact.length > 0) {
+                items.push(emptyLine());
+                items.push(heading3('Celkové hodnocení vlivu lokalizace a načasování'));
+                items.push(para('Vybrané lokalizace a načasování ovlivňují hodnocení rizik následovně (seřazeno od nejvyššího vlivu):'));
+                impact.forEach(item => {
+                    const prefix = item.totalImpact > 0 ? '+' : '';
+                    const typeLabel = item.type === 'location' ? 'Lokalizace' : 'Načasování';
+                    items.push(bulletItem(`${typeLabel}: ${item.name} — vliv na celkovou ohroženost: ${prefix}${item.totalImpact} bodů`));
+                });
+
+                const sorted = [...impact].sort((a, b) => b.totalImpact - a.totalImpact);
+                const highest = sorted[0];
+                const highestByType = {
+                    location: sorted.find(i => i.type === 'location' && i.totalImpact > 0),
+                    timing: sorted.find(i => i.type === 'timing' && i.totalImpact > 0),
+                };
+                items.push(emptyLine());
+                items.push(para('Závěr hodnocení lokalizace a načasování:', { bold: true }));
+                if (highestByType.location) {
+                    items.push(bulletItem(`Nejrizikovější lokalizace: ${highestByType.location.name} (+${highestByType.location.totalImpact} bodů)`));
+                }
+                if (highestByType.timing) {
+                    items.push(bulletItem(`Nejrizikovější načasování: ${highestByType.timing.name} (+${highestByType.timing.totalImpact} bodů)`));
+                }
+                if (highest && highest.totalImpact > 0) {
+                    items.push(para(`Na základě analýzy vlivu lokalizace a načasování představuje nejvyšší riziko kombinace akce na lokalizaci „${highestByType.location?.name || '—'}" v čase „${highestByType.timing?.name || '—'}". Bezpečnostní opatření by měla být zaměřena zejména na tyto oblasti.`));
+                }
+            }
+
+            return items;
+        }
+    } catch (e) {
+        // Fallback na starou verzi
+    }
+
+    // Fallback: textové pole (pro typy akcí bez matice)
     const loc = project.locationSpecifics || '';
     const time = project.timingSpecifics || '';
 
@@ -224,7 +332,7 @@ function generateLocationTimingSpecifics(project) {
     if (loc.trim()) {
         loc.split('\n').filter(l => l.trim()).forEach(l => items.push(bulletItem(l.trim())));
     } else {
-        items.push(placeholderPara('Doplňte specifika lokality v sekci Rizika → Specifické podmínky'));
+        items.push(placeholderPara('Doplňte specifika lokality v sekci Rizika → Specifikace lokalizace'));
     }
 
     items.push(emptyLine());
@@ -232,7 +340,7 @@ function generateLocationTimingSpecifics(project) {
     if (time.trim()) {
         time.split('\n').filter(l => l.trim()).forEach(l => items.push(bulletItem(l.trim())));
     } else {
-        items.push(placeholderPara('Doplňte specifika načasování v sekci Rizika → Specifické podmínky'));
+        items.push(placeholderPara('Doplňte specifika načasování v sekci Rizika → Specifikace načasování'));
     }
     return items;
 }
