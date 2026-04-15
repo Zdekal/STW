@@ -347,7 +347,7 @@ function LocationTimingPanel({
         >
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: '#94a3b8' }}>
             <AddIcon sx={{ fontSize: 18 }} />
-            <Typography variant="body2" sx={{ color: '#94a3b8' }}>Vlastn&iacute; {type === 'location' ? 'lokalizace' : 'na\u010dasov\u00e1n\u00ed'}</Typography>
+            <Typography variant="body2" sx={{ color: '#94a3b8' }}>Vlastní {type === 'location' ? 'lokalizace' : 'načasování'}</Typography>
           </Box>
         </Paper>
       </Box>
@@ -357,21 +357,21 @@ function LocationTimingPanel({
   return (
     <>
       <div className="bg-white rounded-xl shadow-sm border p-5">
-        <Typography variant="h6" className="font-bold text-gray-800 mb-1">Specifikace lokalizace a na\u010dasov\u00e1n\u00ed rizik</Typography>
+        <Typography variant="h6" className="font-bold text-gray-800 mb-1">Specifikace lokalizace a načasování rizik</Typography>
         <Typography variant="body2" className="text-gray-500 mb-4">
-          Za\u0161krtnut\u00ed lokalizace nebo na\u010dasov\u00e1n\u00ed automaticky uprav\u00ed bodov\u00e9 hodnocen\u00ed subfaktor\u016f u p\u0159\u00edslu\u0161n\u00fdch rizik.
-          Hodnoty vych\u00e1zej\u00ed z matice vlivu pro dan\u00fd typ akce. M\u016f\u017eete tak\u00e9 p\u0159idat vlastn\u00ed lokalizaci \u010di na\u010dasov\u00e1n\u00ed
-          a ru\u010dn\u011b ur\u010dit, kter\u00e1 rizika a subfaktory ovlivn\u00ed.
+          Zaškrtnutí lokalizace nebo načasování automaticky upraví bodové hodnocení subfaktorů u příslušných rizik.
+          Hodnoty vycházejí z matice vlivu pro daný typ akce. Můžete také přidat vlastní lokalizaci či načasování
+          a ručně určit, která rizika a subfaktory ovlivní.
         </Typography>
 
         {renderSection('Lokalizace', <PlaceIcon sx={{ color: '#2563eb' }} />, allLocations, 'location', '#2563eb')}
-        {renderSection('Na\u010dasov\u00e1n\u00ed', <ScheduleIcon sx={{ color: '#7c3aed' }} />, allTimings, 'timing', '#7c3aed')}
+        {renderSection('Načasování', <ScheduleIcon sx={{ color: '#7c3aed' }} />, allTimings, 'timing', '#7c3aed')}
 
         {/* Vizualizace vlivu */}
         {locationTimingImpact.length > 0 && (
           <Box sx={{ mt: 3, p: 2, backgroundColor: '#f8fafc', borderRadius: 2, border: '1px solid #e2e8f0' }}>
             <Typography variant="subtitle2" fontWeight="bold" sx={{ mb: 1.5, color: '#334155' }}>
-              Vliv aktivn\u00edch lokalizac\u00ed a na\u010dasov\u00e1n\u00ed na celkovou ohro\u017eenost
+              Vliv aktivních lokalizací a načasování na celkovou ohroženost
             </Typography>
             {locationTimingImpact.map(item => (
               <Box key={item.id} sx={{ mb: 1 }}>
@@ -392,7 +392,7 @@ function LocationTimingPanel({
                       color: item.totalImpact > 0 ? '#dc2626' : item.totalImpact < 0 ? '#16a34a' : '#64748b',
                       whiteSpace: 'nowrap',
                     }}>
-                      {item.totalImpact > 0 ? '+' : ''}{item.totalImpact} bod\u016f
+                      {item.totalImpact > 0 ? '+' : ''}{item.totalImpact} bodů
                     </Typography>
                   </Box>
                 </Box>
@@ -406,7 +406,7 @@ function LocationTimingPanel({
                   <Box sx={{ mt: 2, p: 1.5, backgroundColor: '#fef2f2', borderRadius: 1.5, border: '1px solid #fecaca', display: 'flex', alignItems: 'center', gap: 1 }}>
                     <WarningAmberIcon sx={{ color: '#dc2626', fontSize: 20 }} />
                     <Typography variant="body2" sx={{ color: '#991b1b' }}>
-                      <strong>Nejrizikov\u011bj\u0161\u00ed {highest.type === 'location' ? 'lokalizace' : 'na\u010dasov\u00e1n\u00ed'}:</strong> {highest.name} (+{highest.totalImpact} bod\u016f k celkov\u00e9 ohro\u017eenosti)
+                      <strong>Nejrizikovější {highest.type === 'location' ? 'lokalizace' : 'načasování'}:</strong> {highest.name} (+{highest.totalImpact} bodů k celkové ohroženosti)
                     </Typography>
                   </Box>
                 );
@@ -417,25 +417,25 @@ function LocationTimingPanel({
         )}
       </div>
 
-      {/* Dialog pro p\u0159id\u00e1n\u00ed vlastn\u00ed lokalizace/na\u010dasov\u00e1n\u00ed */}
+      {/* Dialog pro přidání vlastní lokalizace/načasování */}
       <Dialog open={addDialogOpen} onClose={() => setAddDialogOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle>
-          P\u0159idat vlastn\u00ed {addType === 'location' ? 'lokalizaci' : 'na\u010dasov\u00e1n\u00ed'}
+          Přidat vlastní {addType === 'location' ? 'lokalizaci' : 'načasování'}
         </DialogTitle>
         <DialogContent dividers>
           <TextField
-            fullWidth label={addType === 'location' ? 'N\u00e1zev lokalizace' : 'N\u00e1zev na\u010dasov\u00e1n\u00ed'}
+            fullWidth label={addType === 'location' ? 'Název lokalizace' : 'Název načasování'}
             value={addName} onChange={(e) => setAddName(e.target.value)}
-            placeholder={addType === 'location' ? 'Nap\u0159. VIP z\u00f3na, parkovac\u00ed plocha...' : 'Nap\u0159. p\u0159ed startem, ob\u011bdov\u00e1 p\u0159est\u00e1vka...'}
+            placeholder={addType === 'location' ? 'Např. VIP zóna, parkovací plocha...' : 'Např. před startem, obědová přestávka...'}
             sx={{ mb: 3, mt: 1 }}
           />
 
           <Typography variant="subtitle2" fontWeight="bold" sx={{ mb: 1 }}>
-            Vliv na hodnocen\u00ed rizik (voliteln\u00e9)
+            Vliv na hodnocení rizik (volitelné)
           </Typography>
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
-            Ur\u010dete, kter\u00e1 rizika a o kolik bod\u016f se zm\u011bn\u00ed jejich subfaktory.
-            Kladn\u00e9 hodnoty zvy\u0161uj\u00ed, z\u00e1porn\u00e9 sni\u017euj\u00ed. Rozsah: -3 a\u017e +3.
+            Určete, která rizika a o kolik bodů se změní jejich subfaktory.
+            Kladné hodnoty zvyšují, záporné snižují. Rozsah: -3 až +3.
           </Typography>
 
           {addModifiers.map((mod, idx) => (
@@ -467,13 +467,13 @@ function LocationTimingPanel({
           ))}
 
           <Button startIcon={<AddIcon />} onClick={handleAddModifierRow} size="small" sx={{ mt: 1 }}>
-            P\u0159idat ovlivn\u011bn\u00e9 riziko
+            Přidat ovlivněné riziko
           </Button>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setAddDialogOpen(false)}>Zru\u0161it</Button>
+          <Button onClick={() => setAddDialogOpen(false)}>Zrušit</Button>
           <Button variant="contained" onClick={handleSubmitCustom} disabled={!addName.trim()}>
-            P\u0159idat
+            Přidat
           </Button>
         </DialogActions>
       </Dialog>
@@ -487,7 +487,7 @@ function LocationTimingPanel({
 
 export default function ProjectRisks({
   risks = [],
-  environmentType = "kombinovan\u00e1",
+  environmentType = "kombinovaná",
   projectType = "akce",
   showMatrix = true,
   onCreateRisk,
@@ -509,7 +509,7 @@ export default function ProjectRisks({
   onRemoveCustomLocationTiming,
   locationTimingImpact = [],
 }) {
-  const isOutdoor = environmentType === 'venkovn\u00ed' || environmentType === 'vn\u011bj\u0161\u00ed';
+  const isOutdoor = environmentType === 'venkovní' || environmentType === 'vnější';
   const [q, setQ] = useState("");
   const [bandFilter, setBandFilter] = useState("all");
   const [sortKey, setSortKey] = useState("scoreDesc");
@@ -579,36 +579,36 @@ export default function ProjectRisks({
 
   return (
     <div className="p-4 space-y-6">
-      {/* Hlavi\u010dka */}
+      {/* Hlavička */}
       <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="text-xl font-semibold">Anal\u00fdza ohro\u017eenosti</h2>
-          <p className="text-sm opacity-70">\u0160k\u00e1la (P: 3\u201321, D: {isOutdoor ? '3\u201321' : '4\u201328'})</p>
+          <h2 className="text-xl font-semibold">Analýza ohroženosti</h2>
+          <p className="text-sm opacity-70">Škála (P: 3–21, D: {isOutdoor ? '3–21' : '4–28'})</p>
         </div>
         {tabValue === 0 && (
           <div className="flex flex-col gap-2 md:flex-row md:items-center">
             <input
               type="search"
-              placeholder="Hledat riziko\u2026"
+              placeholder="Hledat riziko…"
               value={q}
               onChange={(e) => setQ(e.target.value)}
               className="rounded-lg border px-3 py-2 text-sm md:w-64"
             />
-            <select className="rounded-lg border px-3 py-2 text-sm" value={bandFilter} onChange={(e) => setBandFilter(e.target.value)} title="Filtrovat podle p\u00e1sma">
-              <option value="all">V\u0161echna p\u00e1sma</option>
-              <option value="low">N\u00edzk\u00e9</option>
-              <option value="medium">St\u0159edn\u00ed</option>
-              <option value="high">Vysok\u00e9</option>
-              <option value="critical">Kritick\u00e9</option>
+            <select className="rounded-lg border px-3 py-2 text-sm" value={bandFilter} onChange={(e) => setBandFilter(e.target.value)} title="Filtrovat podle pásma">
+              <option value="all">Všechna pásma</option>
+              <option value="low">Nízké</option>
+              <option value="medium">Střední</option>
+              <option value="high">Vysoké</option>
+              <option value="critical">Kritické</option>
             </select>
-            <select className="rounded-lg border px-3 py-2 text-sm" value={sortKey} onChange={(e) => setSortKey(e.target.value)} title="\u0158azen\u00ed">
-              <option value="scoreDesc">Podle sk\u00f3re \u2193</option>
-              <option value="scoreAsc">Podle sk\u00f3re \u2191</option>
-              <option value="nameAsc">N\u00e1zev A\u2013Z</option>
-              <option value="nameDesc">N\u00e1zev Z\u2013A</option>
+            <select className="rounded-lg border px-3 py-2 text-sm" value={sortKey} onChange={(e) => setSortKey(e.target.value)} title="Řazení">
+              <option value="scoreDesc">Podle skóre ↓</option>
+              <option value="scoreAsc">Podle skóre ↑</option>
+              <option value="nameAsc">Název A–Z</option>
+              <option value="nameDesc">Název Z–A</option>
             </select>
             <button onClick={() => safeExportDocxOrCsv(sorted)} className="rounded-lg border px-3 py-2 text-sm" title="Export rizik (DOCX/CSV)">Export</button>
-            <button onClick={() => setOpenAdd(true)} className="rounded-lg bg-black text-white px-3 py-2 text-sm">+ P\u0159idat riziko</button>
+            <button onClick={() => setOpenAdd(true)} className="rounded-lg bg-black text-white px-3 py-2 text-sm">+ Přidat riziko</button>
           </div>
         )}
       </header>
@@ -621,10 +621,10 @@ export default function ProjectRisks({
         </Tabs>
       </Box>
 
-      {/* \u2550\u2550\u2550 TAB 0: Rizika \u2550\u2550\u2550 */}
+      {/* ═══ TAB 0: Rizika ═══ */}
       {tabValue === 0 && (
         <>
-          {/* Specifikace lokalizace a na\u010dasov\u00e1n\u00ed rizik */}
+          {/* Specifikace lokalizace a načasování rizik */}
           {locationTimingConfig ? (
             <LocationTimingPanel
               locationTimingConfig={locationTimingConfig}
@@ -638,26 +638,26 @@ export default function ProjectRisks({
               locationTimingImpact={locationTimingImpact}
             />
           ) : (
-            /* Fallback: textarea pro typy akc\u00ed bez p\u0159eddefinovan\u00e9 matice */
+            /* Fallback: textarea pro typy akcí bez předdefinované matice */
             <div className="bg-white rounded-xl shadow-sm border p-5">
-              <Typography variant="h6" className="font-bold text-gray-800 mb-2">Specifikace lokalizace a na\u010dasov\u00e1n\u00ed rizik</Typography>
+              <Typography variant="h6" className="font-bold text-gray-800 mb-2">Specifikace lokalizace a načasování rizik</Typography>
               <Typography variant="body2" className="text-gray-500 mb-5">
-                Popi\u0161te konkr\u00e9tn\u00ed m\u00edsta a \u010dasy, kter\u00e9 p\u0159edstavuj\u00ed zv\u00fd\u0161en\u00e9 riziko.
+                Popište konkrétní místa a časy, které představují zvýšené riziko.
               </Typography>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <Typography variant="subtitle2" className="font-semibold text-gray-700 mb-1">Specifika lokality (M\u00edsta)</Typography>
+                  <Typography variant="subtitle2" className="font-semibold text-gray-700 mb-1">Specifika lokality (Místa)</Typography>
                   <textarea
                     className="w-full border rounded-lg p-3 text-sm min-h-[100px] focus:ring focus:ring-blue-100 outline-none"
-                    placeholder="Nap\u0159.: Zadn\u00ed vchod u parku, st\u00edsn\u011bn\u00fd prostor p\u0159ed p\u00f3diem..."
+                    placeholder="Např.: Zadní vchod u parku, stísněný prostor před pódiem..."
                     value={locationSpecifics || ''} onChange={(e) => onUpdateSpecifics && onUpdateSpecifics('locationSpecifics', e.target.value)}
                   />
                 </div>
                 <div>
-                  <Typography variant="subtitle2" className="font-semibold text-gray-700 mb-1">Specifika na\u010dasov\u00e1n\u00ed (Harmonogram)</Typography>
+                  <Typography variant="subtitle2" className="font-semibold text-gray-700 mb-1">Specifika načasování (Harmonogram)</Typography>
                   <textarea
                     className="w-full border rounded-lg p-3 text-sm min-h-[100px] focus:ring focus:ring-blue-100 outline-none"
-                    placeholder="Nap\u0159.: P\u0159\u00edjezd VIP ve 14:00, stm\u00edv\u00e1n\u00ed okolo 19:30..."
+                    placeholder="Např.: Příjezd VIP ve 14:00, stmívání okolo 19:30..."
                     value={timingSpecifics || ''} onChange={(e) => onUpdateSpecifics && onUpdateSpecifics('timingSpecifics', e.target.value)}
                   />
                 </div>
@@ -665,7 +665,7 @@ export default function ProjectRisks({
             </div>
           )}
 
-          {/* Upozorn\u011bn\u00ed na dopad na techniku */}
+          {/* Upozornění na dopad na techniku */}
           {isOutdoor && (
             <Box sx={{ p: 2, backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: 2, display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
               <WarningAmberIcon sx={{ color: '#d97706', mt: 0.3 }} />
@@ -674,26 +674,26 @@ export default function ProjectRisks({
                   Dopad incidentu na techniku a objekt
                 </Typography>
                 <Typography variant="body2" sx={{ color: '#78350f' }}>
-                  P\u0159i hodnocen\u00ed dopadu na techniku a objekt u venkovn\u00edch akc\u00ed pracujeme s verz\u00ed, \u017ee objekt (budova,
-                  sportovi\u0161t\u011b) je ve vlastnictv\u00ed soukrom\u00e9ho subjektu, kter\u00fd ponese dopad na budovu s\u00e1m.
-                  Po\u0159adatel akce proto \u0159e\u0161\u00ed pouze dopad na vlastn\u00ed techniku (nikoli na budovu/objekt).
-                  Z tohoto d\u016fvodu je subfaktor \u201eTechnika/Objekt\u201c u venkovn\u00edch akc\u00ed vynech\u00e1n z v\u00fdpo\u010dtu dopadu.
+                  Při hodnocení dopadu na techniku a objekt u venkovních akcí pracujeme s verzí, že objekt (budova,
+                  sportoviště) je ve vlastnictví soukromého subjektu, který ponese dopad na budovu sám.
+                  Pořadatel akce proto řeší pouze dopad na vlastní techniku (nikoli na budovu/objekt).
+                  Z tohoto důvodu je subfaktor „Technika/Objekt“ u venkovních akcí vynechán z výpočtu dopadu.
                 </Typography>
               </Box>
             </Box>
           )}
 
-          {/* Zva\u017eovan\u00e1 rizika */}
+          {/* Zvažovaná rizika */}
           <div className="bg-white rounded-xl shadow-sm border p-5">
-            <Typography variant="h6" className="font-bold text-gray-800 mb-2">Zva\u017eovan\u00e1 rizika</Typography>
+            <Typography variant="h6" className="font-bold text-gray-800 mb-2">Zvažovaná rizika</Typography>
             <Typography variant="body2" className="text-gray-500 mb-4">
-              Za\u0161krtnut\u00edm nebo od\u0161krtnut\u00edm spravujete rizika aktivn\u00ed v tomto projektu.
+              Zaškrtnutím nebo odškrtnutím spravujete rizika aktivní v tomto projektu.
             </Typography>
 
             {isOutdoor && sorted.some(r => outdoorRisks.includes(r.name)) && (
               <>
                 <Typography variant="subtitle2" className="text-emerald-700 font-bold mb-2 uppercase tracking-wider text-xs bg-emerald-50 inline-block px-2 py-1 rounded">
-                  Specifick\u00e1 rizika pro venkovn\u00ed / kombinovan\u00e9 prost\u0159ed\u00ed
+                  Specifická rizika pro venkovní / kombinované prostředí
                 </Typography>
                 <FormGroup sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 1, mb: 4 }}>
                   {sorted.filter(r => outdoorRisks.includes(r.name)).map(r => (
@@ -708,7 +708,7 @@ export default function ProjectRisks({
             )}
 
             <Typography variant="subtitle2" className="text-indigo-700 font-bold mb-2 uppercase tracking-wider text-xs bg-indigo-50 inline-block px-2 py-1 rounded">
-              {isOutdoor ? "Rizika specifikovan\u00e1 typem akce a ostatn\u00ed" : "Specifick\u00e1 rizika projektu"}
+              {isOutdoor ? "Rizika specifikovaná typem akce a ostatní" : "Specifická rizika projektu"}
             </Typography>
             <FormGroup sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 1 }}>
               {sorted.filter(r => !(isOutdoor && outdoorRisks.includes(r.name))).map(r => (
@@ -719,27 +719,27 @@ export default function ProjectRisks({
                 />
               ))}
               {sorted.length === 0 && (
-                <div className="text-gray-400 text-sm italic">\u017d\u00e1dn\u00e1 rizika zat\u00edm nebyla p\u0159id\u00e1na.</div>
+                <div className="text-gray-400 text-sm italic">Žádná rizika zatím nebyla přidána.</div>
               )}
             </FormGroup>
           </div>
 
-          {/* Matice P \u00d7 D */}
+          {/* Matice P × D */}
           {showMatrix && enriched.length > 0 && (
             <section className="bg-white rounded-xl shadow-sm border p-5">
-              <Typography variant="h6" className="font-bold text-gray-800 mb-1">Anal\u00fdza ohro\u017eenosti</Typography>
+              <Typography variant="h6" className="font-bold text-gray-800 mb-1">Analýza ohroženosti</Typography>
               <Typography variant="body2" className="text-gray-500 mb-4">
-                Vizu\u00e1ln\u00ed interpretace rozd\u011blen\u00ed rizik dle pravd\u011bpodobnosti (P) a dopadu (D).
+                Vizuální interpretace rozdělení rizik dle pravděpodobnosti (P) a dopadu (D).
               </Typography>
               <RiskMatrix threats={enriched} />
             </section>
           )}
 
-          {/* Bodovac\u00ed Tabulka */}
+          {/* Bodovací Tabulka */}
           <Accordion className="shadow-sm border rounded-xl before:hidden" disableGutters>
             <AccordionSummary expandIcon={<ExpandMoreIcon />} className="bg-slate-50/50 hover:bg-slate-50 transition-colors border-b rounded-t-xl">
               <Typography className="font-semibold text-gray-800">
-                Tabulka hodnocen\u00ed ohro\u017eenosti (pokro\u010dil\u00e1 modifikace bod\u016f)
+                Tabulka hodnocení ohroženosti (pokročilá modifikace bodů)
               </Typography>
             </AccordionSummary>
             <AccordionDetails className="p-0">
@@ -749,15 +749,15 @@ export default function ProjectRisks({
                     <tr>
                       <th className="px-3 py-3 font-medium text-left text-gray-500 uppercase tracking-wider">Riziko</th>
                       <th className="px-1 py-3 font-medium text-center text-gray-500 uppercase tracking-wider" title="Dostupnost">Dost.</th>
-                      <th className="px-1 py-3 font-medium text-center text-gray-500 uppercase tracking-wider" title="V\u00fdskyt">V\u00fdskyt</th>
-                      <th className="px-1 py-3 font-medium text-center text-gray-500 uppercase tracking-wider" title="Slo\u017eitost">Slo\u017e.</th>
+                      <th className="px-1 py-3 font-medium text-center text-gray-500 uppercase tracking-wider" title="Výskyt">Výskyt</th>
+                      <th className="px-1 py-3 font-medium text-center text-gray-500 uppercase tracking-wider" title="Složitost">Slož.</th>
                       <th className="px-3 py-3 font-bold text-center border-r border-l border-blue-100 bg-blue-50/50 text-blue-800">P</th>
-                      <th className="px-1 py-3 font-medium text-center text-gray-500 uppercase tracking-wider" title="\u017divoty a zdrav\u00ed">\u017divoty</th>
+                      <th className="px-1 py-3 font-medium text-center text-gray-500 uppercase tracking-wider" title="Životy a zdraví">Životy</th>
                       <th className="px-1 py-3 font-medium text-center text-gray-500 uppercase tracking-wider" title={projectType === "objekt" ? "Objekt" : "Technika"}>{projectType === "objekt" ? "Objekt" : "Technika"}</th>
                       <th className="px-1 py-3 font-medium text-center text-gray-500 uppercase tracking-wider" title="Finance">Finance</th>
-                      <th className="px-1 py-3 font-medium text-center text-gray-500 uppercase tracking-wider" title="Spole\u010denstv\u00ed">Spole\u010d.</th>
+                      <th className="px-1 py-3 font-medium text-center text-gray-500 uppercase tracking-wider" title="Společenství">Společ.</th>
                       <th className="px-3 py-3 font-bold text-center border-r border-l border-orange-100 bg-orange-50/50 text-orange-800">D</th>
-                      <th className="px-3 py-3 font-bold text-center text-gray-800">Sk\u00f3re</th>
+                      <th className="px-3 py-3 font-bold text-center text-gray-800">Skóre</th>
                       <th className="px-3 py-3 font-medium text-right text-gray-500 uppercase tracking-wider">Akce</th>
                     </tr>
                   </thead>
@@ -770,13 +770,13 @@ export default function ProjectRisks({
                             <div className="flex flex-wrap gap-1 mt-1.5 align-middle">
                               {r.tags.map((tag, idx) => {
                                 let sx = { height: 18, fontSize: '0.65rem' };
-                                if (tag.includes("Z\u00e1kladn\u00ed")) { sx.backgroundColor = "transparent"; sx.border = "1px solid #bfdbfe"; sx.color = "#1e40af"; }
-                                else if (tag.includes("Prost\u0159ed\u00ed")) { sx.backgroundColor = "transparent"; sx.border = "1px solid #bbf7d0"; sx.color = "#166534"; }
-                                else if (tag.includes("zranitelnosti") || tag.includes("Zranitelnosti") || tag.includes("specifik") || tag.includes("Modifikov\u00e1no") || tag.includes("P\u0159id\u00e1no")) {
+                                if (tag.includes("Základní")) { sx.backgroundColor = "transparent"; sx.border = "1px solid #bfdbfe"; sx.color = "#1e40af"; }
+                                else if (tag.includes("Prostředí")) { sx.backgroundColor = "transparent"; sx.border = "1px solid #bbf7d0"; sx.color = "#166534"; }
+                                else if (tag.includes("zranitelnosti") || tag.includes("Zranitelnosti") || tag.includes("specifik") || tag.includes("Modifikováno") || tag.includes("Přidáno")) {
                                   sx.backgroundColor = "transparent"; sx.border = "1px solid #fed7aa"; sx.color = "#9a3412";
                                 }
-                                else if (tag.includes("\u010casovka")) { sx.backgroundColor = "transparent"; sx.border = "1px solid #c4b5fd"; sx.color = "#5b21b6"; }
-                                else if (tag.includes("Lokalizace") || tag.includes("Na\u010dasov\u00e1n\u00ed")) {
+                                else if (tag.includes("Časovka")) { sx.backgroundColor = "transparent"; sx.border = "1px solid #c4b5fd"; sx.color = "#5b21b6"; }
+                                else if (tag.includes("Lokalizace") || tag.includes("Načasování")) {
                                   sx.backgroundColor = "transparent"; sx.border = "1px solid #a5b4fc"; sx.color = "#4338ca";
                                 }
                                 return <Chip key={idx} label={tag} size="small" sx={sx} />;
@@ -807,7 +807,7 @@ export default function ProjectRisks({
                         </td>
                         <td className="px-1 py-2 text-center">
                           {isOutdoor ? (
-                            <span className="text-gray-400 font-medium cursor-not-allowed" title="Nevypl\u0148uje se u venkovn\u00edch akc\u00ed">\u2014</span>
+                            <span className="text-gray-400 font-medium cursor-not-allowed" title="Nevyplňuje se u venkovních akcí">—</span>
                           ) : (
                             <select value={r.facility || 1} onChange={(e) => handleSubfactorChange(r, 'facility', e.target.value)} className="border-gray-200 text-gray-600 rounded px-1 py-1 w-12 text-center shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
                               {[1,2,3,4,5,6,7].map(v => <option key={v} value={v}>{v}</option>)}
@@ -827,7 +827,7 @@ export default function ProjectRisks({
                         <td className="px-3 py-2 font-bold text-center border-l border-r border-orange-50 bg-orange-50/20 text-orange-900 tabular-nums">{r.impact}</td>
                         <td className="px-3 py-2 font-black tabular-nums text-gray-900 text-center text-sm">{r.score}</td>
                         <td className="px-3 py-2 text-right space-x-2 whitespace-nowrap">
-                          <button onClick={() => setEditingRisk(r)} className="text-indigo-600 hover:text-indigo-800 font-medium py-1 px-2 rounded hover:bg-indigo-50 transition-colors" title="P\u0159ejmenovat riziko">P\u0159ejmenovat</button>
+                          <button onClick={() => setEditingRisk(r)} className="text-indigo-600 hover:text-indigo-800 font-medium py-1 px-2 rounded hover:bg-indigo-50 transition-colors" title="Přejmenovat riziko">Přejmenovat</button>
                           <button onClick={() => onDeleteRisk && onDeleteRisk(r.id)} className="text-red-500 hover:text-red-700 font-medium py-1 px-2 rounded hover:bg-red-50 transition-colors" title="Odstranit z projektu">Odstranit</button>
                         </td>
                       </tr>
@@ -835,7 +835,7 @@ export default function ProjectRisks({
                     {sorted.length === 0 && (
                       <tr>
                         <td colSpan={12} className="px-4 py-8 text-center text-gray-400 italic">
-                          Tabulka hodnocen\u00ed je pr\u00e1zdn\u00e1. P\u0159idejte nebo aktivujte n\u011bjak\u00e1 rizika.
+                          Tabulka hodnocení je prázdná. Přidejte nebo aktivujte nějaká rizika.
                         </td>
                       </tr>
                     )}
@@ -847,7 +847,7 @@ export default function ProjectRisks({
         </>
       )}
 
-      {/* \u2550\u2550\u2550 TAB 1: Zranitelnosti \u2550\u2550\u2550 */}
+      {/* ═══ TAB 1: Zranitelnosti ═══ */}
       {tabValue === 1 && (
         <VulnerabilityPanel
           globalVulnerabilities={globalVulnerabilities}
@@ -857,7 +857,7 @@ export default function ProjectRisks({
         />
       )}
 
-      {/* Dialog pro p\u0159id\u00e1n\u00ed rizika */}
+      {/* Dialog pro přidání rizika */}
       {openAdd && (
         <AddRiskDialog
           draft={draft}
@@ -867,7 +867,7 @@ export default function ProjectRisks({
         />
       )}
 
-      {/* Dialog pro \u00fapravu rizika */}
+      {/* Dialog pro úpravu rizika */}
       {editingRisk && (
         <AddRiskDialog
           draft={editingRisk}
@@ -906,32 +906,32 @@ ProjectRisks.propTypes = {
 };
 
 /* ========================================================================== */
-/*                              UI Pomocn\u00e9 prvky                              */
+/*                              UI Pomocné prvky                              */
 /* ========================================================================== */
 
-function AddRiskDialog({ draft, onClose, onChange, onSubmit, title = "P\u0159idat riziko" }) {
+function AddRiskDialog({ draft, onClose, onChange, onSubmit, title = "Přidat riziko" }) {
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4">
       <form onSubmit={onSubmit} className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl space-y-4">
         <div className="flex items-center justify-between">
           <h4 className="text-lg font-semibold">{title}</h4>
-          <button type="button" className="rounded-md px-2 py-1 text-sm border" onClick={onClose}>Zav\u0159\u00edt</button>
+          <button type="button" className="rounded-md px-2 py-1 text-sm border" onClick={onClose}>Zavřít</button>
         </div>
         <div className="grid gap-3">
           <label className="grid gap-1 text-sm">
-            <span>N\u00e1zev rizika</span>
+            <span>Název rizika</span>
             <input
               className="rounded-lg border px-3 py-2"
               value={draft.name || ""}
               onChange={(e) => onChange({ ...draft, name: e.target.value })}
-              placeholder="Nap\u0159. Po\u017e\u00e1r ve st\u00e1nkov\u00e9 z\u00f3n\u011b"
+              placeholder="Např. Požár ve stánkové zóně"
               required
             />
           </label>
         </div>
         <div className="flex items-center justify-end gap-2 pt-2">
-          <button type="button" className="rounded-lg border px-3 py-2 text-sm" onClick={onClose}>Zru\u0161it</button>
-          <button type="submit" className="rounded-lg bg-black text-white px-3 py-2 text-sm">Vytvo\u0159it (a n\u00e1sledn\u011b Hodnotit)</button>
+          <button type="button" className="rounded-lg border px-3 py-2 text-sm" onClick={onClose}>Zrušit</button>
+          <button type="submit" className="rounded-lg bg-black text-white px-3 py-2 text-sm">Vytvořit (a následně Hodnotit)</button>
         </div>
       </form>
     </div>
