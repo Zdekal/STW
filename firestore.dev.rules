@@ -1,11 +1,39 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-    // DEV: otevři vše (rychlé prototypování)
-    // Pokud chceš být o chlup přísnější, můžeš dole přepnout na "isSignedIn()"
-    match /{document=**} {
-      allow read, write: if true;
+
+    function isSignedIn() {
+      return request.auth != null;
     }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+    }
+
+    match /users/{userId} {
+      // Doporučení: uživatel čte jen svůj profil, admin může číst všechny
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+
+      // Uživatel může psát jen svůj profil (případně admin může spravovat i cizí)
+      allow write: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+    }
+
+    match /measures_library/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /object_threats_library/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /registrationRequests/{id} {
+      allow create: if true;
+      allow read, update: if isAdmin();
+    }
+
+    // ... zbytek pravidel
   }
 }

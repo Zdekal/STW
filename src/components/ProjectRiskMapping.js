@@ -7,7 +7,7 @@ import {
     FormGroup, FormControlLabel, FormControl, InputLabel, Select, MenuItem, OutlinedInput,
     ListItemText, Chip, Switch, Alert, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle
 } from '@mui/material';
-import { Add, Delete, Edit, Save, AdminPanelSettings, Refresh } from '@mui/icons-material';
+import { Add, Delete, Edit, Save, AdminPanelSettings, Refresh, CloudSync } from '@mui/icons-material';
 // --- OPRAVA ZDE: Správná cesta k souboru v rámci složky src ---
 import { defaultMeasures, allPossibleRisks } from '../config/securityData';
 
@@ -22,7 +22,9 @@ function ProjectRiskMapping() {
     const [isAdmin, setIsAdmin] = useState(false);
     const [isAdminMode, setIsAdminMode] = useState(false);
     const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
-    
+    const [syncConfirmOpen, setSyncConfirmOpen] = useState(false);
+    const [syncStatus, setSyncStatus] = useState(null);
+
     const [newMeasure, setNewMeasure] = useState({ text: '', isPrevention: true, isDetection: false, isReaction: false, applicableRisks: [] });
     const [editingId, setEditingId] = useState(null);
     const [editingData, setEditingData] = useState(null);
@@ -94,6 +96,29 @@ function ProjectRiskMapping() {
         setResetConfirmOpen(false);
     };
 
+    // Hromadná synchronizace: přepíše globální šablonu i osobní knihovnu
+    // aktuálním obsahem defaultMeasures z kódu (src/config/securityData.js).
+    const handleSyncAllFromCode = async () => {
+        if (!currentUser || !isAdmin) return;
+        setSyncStatus('running');
+        try {
+            const personalLibraryRef = doc(db, 'users', currentUser.uid, 'settings', 'measureLibrary');
+            const globalLibraryRef = doc(db, 'measures_library', 'default');
+            const payload = { items: defaultMeasures, lastUpdated: serverTimestamp() };
+            await Promise.all([
+                setDoc(globalLibraryRef, payload, { merge: true }),
+                setDoc(personalLibraryRef, payload, { merge: true }),
+            ]);
+            setMeasures(defaultMeasures);
+            setSyncStatus('done');
+        } catch (err) {
+            console.error('Sync selhala:', err);
+            setSyncStatus('error');
+        } finally {
+            setSyncConfirmOpen(false);
+        }
+    };
+
     const handleAddMeasure = () => {
         if (newMeasure.text.trim() === '') return;
         const newMeasureItem = { id: generateUniqueId(), ...newMeasure };
@@ -147,6 +172,16 @@ function ProjectRiskMapping() {
                     >
                         Resetovat knihovnu
                     </Button>
+                    {isAdmin && (
+                        <Button
+                            variant="contained"
+                            color="primary"
+                            startIcon={<CloudSync />}
+                            onClick={() => setSyncConfirmOpen(true)}
+                        >
+                            Synchronizovat vše s kódem
+                        </Button>
+                    )}
                     {isAdmin && (
                         <FormControlLabel
                             control={<Switch checked={isAdminMode} onChange={(e) => setIsAdminMode(e.target.checked)} />}
@@ -235,6 +270,38 @@ function ProjectRiskMapping() {
                 </div>
             </Paper>
 
+            {syncStatus === 'done' && (
+                <Alert severity="success" onClose={() => setSyncStatus(null)} sx={{ mt: 2 }}>
+                    Globální i osobní knihovna byla přepsána obsahem ze securityData.js ({defaultMeasures.length} opatření).
+                </Alert>
+            )}
+            {syncStatus === 'error' && (
+                <Alert severity="error" onClose={() => setSyncStatus(null)} sx={{ mt: 2 }}>
+                    Synchronizace selhala. Zkontrolujte konzoli prohlížeče.
+                </Alert>
+            )}
+
+            <Dialog
+                open={syncConfirmOpen}
+                onClose={() => setSyncConfirmOpen(false)}
+            >
+                <DialogTitle>Synchronizovat obě knihovny s kódem?</DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        Přepíše <strong>globální šablonu</strong> (<code>measures_library/default</code>) i vaši
+                        <strong> osobní knihovnu</strong> aktuálním obsahem <code>src/config/securityData.js</code> —
+                        tedy {defaultMeasures.length} opatření s opravenými vazbami na rizika.
+                        Vlastní úpravy v obou knihovnách budou ztraceny.
+                    </DialogContentText>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setSyncConfirmOpen(false)}>Zrušit</Button>
+                    <Button onClick={handleSyncAllFromCode} color="primary" variant="contained" disabled={syncStatus === 'running'} autoFocus>
+                        {syncStatus === 'running' ? 'Synchronizuji…' : 'Ano, přepsat obě'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
             <Dialog
                 open={resetConfirmOpen}
                 onClose={() => setResetConfirmOpen(false)}
@@ -243,7 +310,7 @@ function ProjectRiskMapping() {
                 <DialogContent>
                     <DialogContentText>
                         Tato akce trvale přepíše vaši současnou <strong>{isAdminMode ? 'globální' : 'osobní'}</strong> knihovnu
-                        výchozí šablonou obsahující 22 opatření. Všechny vaše vlastní úpravy budou ztraceny.
+                        výchozí šablonou obsahující {defaultMeasures.length} opatření. Všechny vaše vlastní úpravy budou ztraceny.
                     </DialogContentText>
                 </DialogContent>
                 <DialogActions>

@@ -70,12 +70,12 @@ function GlobalObjectThreats() {
 
     return (
         <Paper sx={{ p: 4 }}>
-            <Typography variant="h4" gutterBottom>Správa globální knihovny hrozeb pro objekty</Typography>
+            <Typography variant="h4" gutterBottom>Správa globální knihovny hrozeb</Typography>
             <Alert severity="info" sx={{ mb: 2 }}>Zde upravujete výchozí šablonu, která se použije pro všechny nově vytvořené analýzy.</Alert>
             <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-                <TextField 
-                    label="Název nové hrozby" 
-                    value={newThreatName} 
+                <TextField
+                    label="Název nové hrozby"
+                    value={newThreatName}
                     onChange={(e) => setNewThreatName(e.target.value)}
                     fullWidth
                     size="small"

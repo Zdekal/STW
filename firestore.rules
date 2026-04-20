@@ -3,25 +3,44 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    function isAdmin() {
+      // UID hlavniho administratora nebo fallback na claim admin/email
+      return request.auth != null && (
+        request.auth.uid == 'Ubqw75LKRdS1riTCXg6QhPOa8dM2' || 
+        request.auth.token.admin == true
+      );
+    }
+
     // --- RULES FOR USERS ---
     match /users/{userId} {
-      allow write: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null && (request.auth.uid == userId || isAdmin());
       allow read: if request.auth != null;
+      
+      // Prava pro vlastni subkolekce (napr. settings/measureLibrary)
+      match /{document=**} {
+        allow read, write: if request.auth != null && (request.auth.uid == userId || isAdmin());
+      }
     }
 
     // --- RULES FOR PROJECTS AND THEIR SUBCOLLECTIONS ---
     match /projects/{projectId} {
-      allow read, update: if request.auth != null && request.auth.uid in resource.data.members;
+      // FIX pro permission-denied: Dotaz (Dashboard) filtruje prez memberIds!
+      allow read, update: if request.auth != null && (
+        request.auth.uid in resource.data.get('memberIds', []) || 
+        request.auth.uid in resource.data.get('members', []) ||
+        request.auth.uid == resource.data.get('ownerId', '') ||
+        isAdmin()
+      );
       allow create: if request.auth != null;
-      allow delete: if request.auth != null && request.auth.uid == resource.data.ownerId;
+      allow delete: if request.auth != null && request.auth.uid == resource.data.get('ownerId', '');
       
       match /buildings/{buildingId} {
         allow read, write: if request.auth != null && 
-          request.auth.uid in get(/databases/$(database)/documents/projects/$(projectId)).data.members;
+          (request.auth.uid in get(/databases/$(database)/documents/projects/$(projectId)).data.memberIds || isAdmin());
 
         match /{document=**} {
           allow read, write: if request.auth != null && 
-            request.auth.uid in get(/databases/$(database)/documents/projects/$(projectId)).data.members;
+            (request.auth.uid in get(/databases/$(database)/documents/projects/$(projectId)).data.memberIds || isAdmin());
         }
       }
     }
@@ -29,18 +48,24 @@ service cloud.firestore {
     // --- RULES FOR GLOBAL LIBRARIES (TEMPLATES) ---
     match /measures_library/{measureId} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.token.admin == true;
+      allow write: if isAdmin();
     }
 
     match /object_threats_library/{libraryId} {
         allow read: if request.auth != null;
-        allow write: if request.auth != null && request.auth.token.admin == true;
+        allow write: if isAdmin();
+    }
+    
+    // --- RULES FOR SETTINGS (GLOBAL PROJECT RISKS) ---
+    match /settings/{document=**} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
     }
 
     // --- RULES FOR REGISTRATIONS ---
     match /registrationRequests/{requestId} {
       allow create: if true;
-      allow read, update: if request.auth != null && request.auth.token.admin == true;
+      allow read, update: if isAdmin();
       allow delete: if false;
     }
   }

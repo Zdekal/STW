@@ -19,7 +19,7 @@ const SaveStatusIndicator = ({ status }) => {
 const CommunicationPhase = ({ title, time, phaseKey, scenarioId, phaseData, onPhaseChange }) => (
     <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
         <Typography variant="h6" gutterBottom>{title}</Typography>
-        <Typography variant="caption" color="text.secondary" display="block" sx={{mt: -1, mb: 2}}>{time}</Typography>
+        <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: -1, mb: 2 }}>{time}</Typography>
         <TextField
             label="Komunikační kanály"
             fullWidth
@@ -63,28 +63,25 @@ function ProjectCommunication() {
     // Načítání dat z Firestore
     useEffect(() => {
         if (!projectId) return;
-        const projectDocRef = doc(db, 'projects', projectId);
-        const unsubscribe = onSnapshot(projectDocRef, (docSnap) => {
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                // Načteme týmy ze základních údajů
-                const teamsFromDb = data.involvedTeams ? Object.keys(data.involvedTeams).filter(key => data.involvedTeams[key]) : [];
-                setInvolvedTeams(teamsFromDb);
 
-                // Inicializujeme plán komunikace, pokud neexistuje
-                if (data.crisisCommunicationPlan) {
-                    // Zajistíme, že interní kontakty jsou synchronizované s týmy
+        if (projectId.startsWith('local-')) {
+            import('../../services/localStore').then(({ listProjects }) => {
+                const lp = listProjects().find(p => p.id === projectId);
+                if (lp) {
+                    const data = lp;
+                    const teamsFromDb = data.involvedTeams ? Object.keys(data.involvedTeams).filter(key => data.involvedTeams[key]) : [];
+                    setInvolvedTeams(teamsFromDb);
+
+                    const basePlan = data.crisisCommunicationPlan || {};
                     const syncedContacts = teamsFromDb.reduce((acc, teamName) => {
-                        acc[teamName] = data.crisisCommunicationPlan.internalContacts?.[teamName] || '';
+                        acc[teamName] = basePlan.internalContacts?.[teamName] || '';
                         return acc;
                     }, {});
-                    setPlan({ ...data.crisisCommunicationPlan, internalContacts: syncedContacts });
-                } else {
-                    const initialContacts = teamsFromDb.reduce((acc, teamName) => ({...acc, [teamName]: ''}), {});
+
                     setPlan({
-                        mediaSpokesperson: { name: '', phone: '' },
-                        internalContacts: initialContacts,
-                        scenarios: [{
+                        mediaSpokesperson: basePlan.mediaSpokesperson || { name: '', phone: '' },
+                        internalContacts: syncedContacts,
+                        scenarios: basePlan.scenarios && basePlan.scenarios.length > 0 ? basePlan.scenarios : [{
                             id: uuidv4(),
                             title: 'Výchozí scénář (např. požár)',
                             phases: {
@@ -95,6 +92,45 @@ function ProjectCommunication() {
                         }]
                     });
                 }
+                setLoading(false);
+            });
+            return;
+        }
+
+        if (!db) {
+            setLoading(false);
+            return;
+        }
+
+        const projectDocRef = doc(db, 'projects', projectId);
+        const unsubscribe = onSnapshot(projectDocRef, (docSnap) => {
+            if (docSnap.metadata.hasPendingWrites) return;
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                // Načteme týmy ze základních údajů
+                const teamsFromDb = data.involvedTeams ? Object.keys(data.involvedTeams).filter(key => data.involvedTeams[key]) : [];
+                setInvolvedTeams(teamsFromDb);
+
+                // Inicializujeme plán komunikace, pokud neexistuje nebo mu chybí pole
+                const basePlan = data.crisisCommunicationPlan || {};
+                const syncedContacts = teamsFromDb.reduce((acc, teamName) => {
+                    acc[teamName] = basePlan.internalContacts?.[teamName] || '';
+                    return acc;
+                }, {});
+
+                setPlan({
+                    mediaSpokesperson: basePlan.mediaSpokesperson || { name: '', phone: '' },
+                    internalContacts: syncedContacts,
+                    scenarios: basePlan.scenarios && basePlan.scenarios.length > 0 ? basePlan.scenarios : [{
+                        id: uuidv4(),
+                        title: 'Výchozí scénář (např. požár)',
+                        phases: {
+                            immediate: { channels: '', groups: '', messageTemplate: '' },
+                            summary: { channels: '', groups: '', messageTemplate: '' },
+                            followUp: { channels: '', groups: '', messageTemplate: '' },
+                        }
+                    }]
+                });
             }
             setLoading(false);
         });
@@ -104,6 +140,20 @@ function ProjectCommunication() {
     // Automatické ukládání
     const saveData = useCallback(async (dataToSave) => {
         if (!dataToSave || !projectId) return;
+
+        if (projectId.startsWith('local-')) {
+            import('../../services/localStore').then(({ listProjects, updateProject }) => {
+                const existing = listProjects().find(p => p.id === projectId);
+                if (existing) {
+                    updateProject({ ...existing, crisisCommunicationPlan: dataToSave });
+                    setSaveStatus('Uloženo');
+                }
+            });
+            return;
+        }
+
+        if (!db) return;
+
         const projectRef = doc(db, 'projects', projectId);
         try {
             await updateDoc(projectRef, { crisisCommunicationPlan: dataToSave, lastEdited: serverTimestamp() });
@@ -123,7 +173,7 @@ function ProjectCommunication() {
     const handlePlanChange = (field, value) => setPlan(prev => ({ ...prev, [field]: value }));
     const handleSpokespersonChange = (field, value) => handlePlanChange('mediaSpokesperson', { ...plan.mediaSpokesperson, [field]: value });
     const handleInternalContactChange = (teamName, value) => handlePlanChange('internalContacts', { ...plan.internalContacts, [teamName]: value });
-    
+
     const handleAddScenario = () => {
         const newScenario = {
             id: uuidv4(), title: 'Nový scénář',
@@ -133,11 +183,11 @@ function ProjectCommunication() {
     };
 
     const handleRemoveScenario = (id) => {
-        if(window.confirm('Opravdu smazat tento scénář?')) {
+        if (window.confirm('Opravdu smazat tento scénář?')) {
             handlePlanChange('scenarios', plan.scenarios.filter(s => s.id !== id));
         }
     };
-    
+
     const handleScenarioChange = (id, field, value) => {
         const newScenarios = plan.scenarios.map(s => s.id === id ? { ...s, [field]: value } : s);
         handlePlanChange('scenarios', newScenarios);
@@ -166,22 +216,22 @@ function ProjectCommunication() {
                 </Typography>
                 <SaveStatusIndicator status={saveStatus} />
             </Box>
-            
+
             {/* --- Sekce: Mluvčí a Interní kontakty --- */}
             <Paper variant="outlined" sx={{ p: 3 }}>
                 <Typography variant="h5" gutterBottom>Klíčové kontakty</Typography>
                 <Box className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <Box>
                         <Typography variant="h6" gutterBottom>Mluvčí pro média</Typography>
-                        <TextField label="Jméno a příjmení" fullWidth variant="outlined" size="small" value={plan.mediaSpokesperson.name} onChange={(e) => handleSpokespersonChange('name', e.target.value)} sx={{mb:2}} />
+                        <TextField label="Jméno a příjmení" fullWidth variant="outlined" size="small" value={plan.mediaSpokesperson.name} onChange={(e) => handleSpokespersonChange('name', e.target.value)} sx={{ mb: 2 }} />
                         <TextField label="Kontaktní mobil" fullWidth variant="outlined" size="small" value={plan.mediaSpokesperson.phone} onChange={(e) => handleSpokespersonChange('phone', e.target.value)} />
                     </Box>
                     <Box>
                         <Typography variant="h6" gutterBottom>Kontakty pro interní komunikaci</Typography>
-                        <Box sx={{maxHeight: 200, overflowY: 'auto', pr: 1}}>
-                        {involvedTeams.length > 0 ? involvedTeams.map(team => (
-                            <TextField key={team} label={team} fullWidth variant="outlined" size="small" placeholder="Jméno kontaktní osoby..." value={plan.internalContacts[team] || ''} onChange={(e) => handleInternalContactChange(team, e.target.value)} sx={{mb:2}} />
-                        )) : <Typography variant="body2" color="text.secondary">V sekci "Základní údaje" zatím nebyly vybrány žádné týmy.</Typography>}
+                        <Box sx={{ maxHeight: 200, overflowY: 'auto', pr: 1 }}>
+                            {involvedTeams.length > 0 ? involvedTeams.map(team => (
+                                <TextField key={team} label={team} fullWidth variant="outlined" size="small" placeholder="Jméno kontaktní osoby..." value={plan.internalContacts[team] || ''} onChange={(e) => handleInternalContactChange(team, e.target.value)} sx={{ mb: 2 }} />
+                            )) : <Typography variant="body2" color="text.secondary">V sekci "Základní údaje" zatím nebyly vybrány žádné týmy.</Typography>}
                         </Box>
                     </Box>
                 </Box>
@@ -189,17 +239,19 @@ function ProjectCommunication() {
 
             {/* --- Sekce: Komunikační scénáře --- */}
             <Box>
-                <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                     <Typography variant="h5">Komunikační scénáře</Typography>
                     <Button variant="contained" startIcon={<AddCircleOutline />} onClick={handleAddScenario}>Přidat scénář</Button>
                 </Box>
-                
+
                 <Box className="space-y-4">
                     {plan.scenarios.map(scenario => (
                         <Accordion key={scenario.id} TransitionProps={{ unmountOnExit: true }} defaultExpanded>
                             <AccordionSummary expandIcon={<ExpandMore />}>
                                 <TextField fullWidth variant="standard" value={scenario.title} onClick={(e) => e.stopPropagation()} onChange={(e) => handleScenarioChange(scenario.id, 'title', e.target.value)} InputProps={{ style: { fontSize: '1.5rem', fontWeight: 'bold' }, disableUnderline: true }} />
-                                <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleRemoveScenario(scenario.id); }}><Delete /></IconButton>
+                                <Box onClick={(e) => { e.stopPropagation(); handleRemoveScenario(scenario.id); }} sx={{ cursor: 'pointer', color: 'text.secondary', '&:hover': { color: 'error.main' }, display: 'flex', alignItems: 'center', p: 1, borderRadius: '50%' }} title="Smazat scénář">
+                                    <Delete />
+                                </Box>
                             </AccordionSummary>
                             <AccordionDetails>
                                 <Box className="grid grid-cols-1 lg:grid-cols-3 gap-4">

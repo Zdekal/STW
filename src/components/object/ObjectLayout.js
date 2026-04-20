@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink, Outlet, Link } from 'react-router-dom';
+import { NavLink, Outlet, Link, useParams } from 'react-router-dom';
 import { Box, Paper, List, ListItemText, Typography, ListItemButton } from '@mui/material';
 
 // --- ZMĚNA ZDE: Doplněny položky Rizika a Opatření ---
@@ -9,11 +9,15 @@ const navItems = [
     { to: 'risks', label: 'Rizika' },
     { to: 'measures', label: 'Opatření' },
     { to: 'directives', label: 'Bezpečnostní směrnice' },
-    { to: 'plan', label: 'Bezpečnostní plán' },
     { to: 'soft-target-card', label: 'Karta objektu' },
+    { divider: true },
+    { to: 'output-documents', label: 'Výstupní dokumenty' },
 ];
 
 function ObjectLayout() {
+    const { id: projectId } = useParams();
+    const basePath = `/project/${projectId}`;
+
     return (
         <Box sx={{ display: 'flex', height: '100vh', backgroundColor: '#f4f6f8' }}>
             <Paper component="aside" elevation={2} sx={{ width: 280, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
@@ -23,10 +27,14 @@ function ObjectLayout() {
                     </Typography>
                 </Box>
                 <List component="nav" sx={{ flexGrow: 1 }}>
-                    {navItems.map((item) => (
-                        <ListItemButton key={item.to} component={NavLink} to={item.to} end>
-                            <ListItemText primary={item.label} />
-                        </ListItemButton>
+                    {navItems.map((item, idx) => (
+                        item.divider ? (
+                            <Box key={`div-${idx}`} sx={{ my: 1, borderTop: '1px solid #e0e0e0' }} />
+                        ) : (
+                            <ListItemButton key={item.to} component={NavLink} to={`${basePath}/${item.to}`} end>
+                                <ListItemText primary={item.label} />
+                            </ListItemButton>
+                        )
                     ))}
                 </List>
                 <div style={{ marginTop: 'auto', borderTop: '1px solid #ddd', padding: '8px' }}>

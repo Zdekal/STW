@@ -25,12 +25,12 @@ import {
     Group,
     Campaign,
     Description,
-    ListAlt
+    ListAlt,
+    Share
 } from '@mui/icons-material';
 import logoFull from '../assets/logo-full.png';
 
-// ID administrátora
-const ADMIN_UID = 'Ubqw75LKRdS1riTCXg6QhPOa8dM2';
+// ID administrátora není natvrdo potřeba, kontroluje se pomocí claims
 
 /**
  * Sjednocená komponenta Sidebar.
@@ -42,19 +42,33 @@ function Sidebar() {
     const { id: projectId } = useParams(); // Získáme ID projektu z URL
 
     const [projectName, setProjectName] = useState('');
+    const [projectType, setProjectType] = useState('');
 
     // Načtení názvu projektu, pokud jsme v detailu projektu
     useEffect(() => {
         if (projectId) {
+            if (projectId.startsWith('local-')) {
+                import('../services/localStore').then(({ listProjects }) => {
+                    const lp = listProjects().find(p => p.id === projectId);
+                    if (lp) {
+                        setProjectName(lp.name);
+                        setProjectType(lp.projectType || 'event');
+                    }
+                });
+                return;
+            }
+            if (!db) return;
             const projectRef = doc(db, 'projects', projectId);
             const unsubscribe = onSnapshot(projectRef, (docSnap) => {
                 if (docSnap.exists()) {
                     setProjectName(docSnap.data().name);
+                    setProjectType(docSnap.data().projectType || 'event');
                 }
             });
             return () => unsubscribe();
         } else {
             setProjectName(''); // Vyčistíme název, pokud nejsme na stránce projektu
+            setProjectType('');
         }
     }, [projectId]);
 
@@ -84,17 +98,46 @@ function Sidebar() {
         { text: 'Nastavení', icon: <Settings />, path: '/settings' },
         { text: 'Nápověda', icon: <HelpOutline />, path: '/help' },
     ];
-    
-    // Dynamicky generované položky pro projektové menu
-    const projectNavItems = projectId ? [
-        { text: 'Základní údaje', icon: <Home />, path: `/project/${projectId}/basic` },
-        { text: 'Rizika', icon: <Security />, path: `/project/${projectId}/risks` },
-        { text: 'Opatření', icon: <Task />, path: `/project/${projectId}/measures` },
-        { text: 'Tým', icon: <Group />, path: `/project/${projectId}/team` },
-        { text: 'Komunikace', icon: <Campaign />, path: `/project/${projectId}/communication` },
-        { text: 'Checklist', icon: <ListAlt />, path: `/project/${projectId}/checklist` },
-        { text: 'Dokument Plánu', icon: <Description />, path: `/project/${projectId}/plan` },
-    ] : [];
+
+    // Dynamicky generované položky pro projektové menu podle typu
+    let projectNavItems = [];
+    if (projectId) {
+        if (projectType === 'kampus') {
+            projectNavItems = [
+                { text: 'Přehled kampusu', icon: <Home />, path: `/project/${projectId}/overview` },
+                { text: 'Centrální opatření', icon: <Task />, path: `/project/${projectId}/central-measures` },
+                { text: 'Bezpečnostní směrnice', icon: <Description />, path: `/project/${projectId}/directives` },
+                { text: 'Bezpečnostní plán', icon: <Description />, path: `/project/${projectId}/plan` },
+                { text: 'Krizový štáb', icon: <Group />, path: `/project/${projectId}/crisis-team` },
+                { text: 'Deník incidentů', icon: <ListAlt />, path: `/project/${projectId}/central-incident-log` },
+            ];
+        } else if (projectType === 'objekt') {
+            projectNavItems = [
+                { text: 'Dotazník ohroženosti', icon: <Home />, path: `/project/${projectId}/questionnaire` },
+                { text: 'Analýza hrozeb', icon: <Security />, path: `/project/${projectId}/threat-analysis` },
+                { text: 'Bezpečnostní rizika', icon: <Security />, path: `/project/${projectId}/risks` },
+                { text: 'Bezpečnostní opatření', icon: <Task />, path: `/project/${projectId}/measures` },
+                { text: 'Bezpečnostní směrnice', icon: <Description />, path: `/project/${projectId}/directives` },
+                { text: 'Bezpečnostní plán', icon: <Description />, path: `/project/${projectId}/plan` },
+                { text: 'Měkký cíl', icon: <Description />, path: `/project/${projectId}/soft-target-card` }
+            ];
+        } else {
+            // event (Akce)
+            projectNavItems = [
+                { text: 'Základní údaje', icon: <Home />, path: `/project/${projectId}/basic` },
+                { text: 'Rizika', icon: <Security />, path: `/project/${projectId}/risks` },
+                { text: 'Opatření', icon: <Task />, path: `/project/${projectId}/measures` },
+                { text: 'Postupy', icon: <ListAlt />, path: `/project/${projectId}/procedures` },
+                { text: 'Tým', icon: <Group />, path: `/project/${projectId}/team` },
+                { text: 'Komunikace', icon: <Campaign />, path: `/project/${projectId}/communication` },
+                { text: 'Checklist', icon: <ListAlt />, path: `/project/${projectId}/checklist` },
+                { text: 'Dokument Plánu', icon: <Description />, path: `/project/${projectId}/plan` },
+                { text: 'Deník akce', icon: <ListAlt />, path: `/project/${projectId}/log` },
+                { text: 'Sdílení', icon: <Share />, path: `/project/${projectId}/sharing` },
+                { text: 'Správa projektu', icon: <Settings />, path: `/project/${projectId}/management` },
+            ];
+        }
+    }
 
     return (
         <Box
@@ -127,7 +170,7 @@ function Sidebar() {
                     <>
                         <Divider sx={{ my: 1 }}><Chip label={projectName || "Projekt"} size="small" /></Divider>
                         {projectNavItems.map((item) => (
-                             <ListItemButton key={item.text} component={NavLink} to={item.path} sx={{ '&.active': activeLinkStyle, m: 1, borderRadius: '8px' }}>
+                            <ListItemButton key={item.text} component={NavLink} to={item.path} sx={{ '&.active': activeLinkStyle, m: 1, borderRadius: '8px' }}>
                                 <ListItemIcon>{item.icon}</ListItemIcon>
                                 <ListItemText primary={item.text} />
                             </ListItemButton>
@@ -149,10 +192,10 @@ function Sidebar() {
 
             <Box sx={{ p: 2, mt: 'auto' }}>
                 <Divider />
-                 <Typography variant="body2" noWrap sx={{mt: 2, mb: 1, color: 'text.secondary'}}>
+                <Typography variant="body2" noWrap sx={{ mt: 2, mb: 1, color: 'text.secondary' }}>
                     {currentUser?.email}
                 </Typography>
-                <ListItemButton onClick={handleLogout} sx={{ borderRadius: '8px', '&:hover': { backgroundColor: 'rgba(255, 0, 0, 0.08)' }}}>
+                <ListItemButton onClick={handleLogout} sx={{ borderRadius: '8px', '&:hover': { backgroundColor: 'rgba(255, 0, 0, 0.08)' } }}>
                     <ListItemIcon><Logout color="error" /></ListItemIcon>
                     <ListItemText primary="Odhlásit se" />
                 </ListItemButton>

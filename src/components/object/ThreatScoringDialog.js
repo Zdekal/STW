@@ -28,15 +28,15 @@ function ThreatScoringDialog({ open, onClose, threat, onSave }) {
 
   useEffect(() => {
     // When the dialog opens, initialize scores from the threat object
-    if (threat) {
+    if (threat && typeof threat === 'object') {
       setScores({
-        availability: threat.availability || 1,
-        occurrence: threat.occurrence || 1,
-        complexity: threat.complexity || 1,
-        lifeAndHealth: threat.lifeAndHealth || 1,
-        facility: threat.facility || 1,
-        financial: threat.financial || 1,
-        community: threat.community || 1,
+        availability: Number(threat.availability) || 1,
+        occurrence: Number(threat.occurrence) || 1,
+        complexity: Number(threat.complexity) || 1,
+        lifeAndHealth: Number(threat.lifeAndHealth) || 1,
+        facility: Number(threat.facility) || 1,
+        financial: Number(threat.financial) || 1,
+        community: Number(threat.community) || 1,
       });
     }
   }, [threat, open]);

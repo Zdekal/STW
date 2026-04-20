@@ -10,15 +10,15 @@ import StarterKit from '@tiptap/starter-kit';
 
 // Komponenta pro ovládací panel editoru TipTap (stejná jako v předchozí komponentě)
 const MenuBar = ({ editor }) => {
-  if (!editor) return null;
-  return (
-    <Box sx={{ borderBottom: 1, borderColor: 'divider', p: 1, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-      <Button size="small" onClick={() => editor.chain().focus().toggleBold().run()} variant={editor.isActive('bold') ? 'contained' : 'outlined'}>Bold</Button>
-      <Button size="small" onClick={() => editor.chain().focus().toggleItalic().run()} variant={editor.isActive('italic') ? 'contained' : 'outlined'}>Italic</Button>
-      <Button size="small" onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} variant={editor.isActive('heading', { level: 2 }) ? 'contained' : 'outlined'}>Nadpis</Button>
-      <Button size="small" onClick={() => editor.chain().focus().toggleBulletList().run()} variant={editor.isActive('bulletList') ? 'contained' : 'outlined'}>Seznam</Button>
-    </Box>
-  );
+    if (!editor) return null;
+    return (
+        <Box sx={{ borderBottom: 1, borderColor: 'divider', p: 1, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            <Button size="small" onClick={() => editor.chain().focus().toggleBold().run()} variant={editor.isActive('bold') ? 'contained' : 'outlined'}>Bold</Button>
+            <Button size="small" onClick={() => editor.chain().focus().toggleItalic().run()} variant={editor.isActive('italic') ? 'contained' : 'outlined'}>Italic</Button>
+            <Button size="small" onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} variant={editor.isActive('heading', { level: 2 }) ? 'contained' : 'outlined'}>Nadpis</Button>
+            <Button size="small" onClick={() => editor.chain().focus().toggleBulletList().run()} variant={editor.isActive('bulletList') ? 'contained' : 'outlined'}>Seznam</Button>
+        </Box>
+    );
 };
 
 const EditorWrapper = styled(Box)(({ theme }) => ({
@@ -45,7 +45,7 @@ function ObjectSecurityPlan() {
         contacts: '', // Kontakty
         info: ''      // Systém informování
     });
-    
+
     const isInitialLoad = useRef(true);
     const debounceTimeout = useRef(null);
 
@@ -67,10 +67,22 @@ function ObjectSecurityPlan() {
             setLoading(true);
             isInitialLoad.current = true;
             try {
-                const docRef = doc(db, 'projects', projectId, 'buildings', objectId);
-                const docSnap = await getDoc(docRef);
-                if (docSnap.exists() && docSnap.data().objectSecurityPlan) {
-                    const data = docSnap.data().objectSecurityPlan;
+                let data = null;
+                if (projectId.startsWith('local-')) {
+                    const { listProjects } = await import('../../services/localStore');
+                    const lp = listProjects().find(p => p.id === projectId);
+                    if (lp && lp.buildings && lp.buildings[objectId] && lp.buildings[objectId].objectSecurityPlan) {
+                        data = lp.buildings[objectId].objectSecurityPlan;
+                    }
+                } else if (db) {
+                    const docRef = doc(db, 'projects', projectId, 'buildings', objectId);
+                    const docSnap = await getDoc(docRef);
+                    if (docSnap.exists() && docSnap.data().objectSecurityPlan) {
+                        data = docSnap.data().objectSecurityPlan;
+                    }
+                }
+
+                if (data) {
                     const loadedSections = {
                         general: data.general || '',
                         phases: data.phases || '',
@@ -92,6 +104,23 @@ function ObjectSecurityPlan() {
         if (!projectId || !objectId) return;
         setSavingStatus('Ukládání...');
         try {
+            if (projectId.startsWith('local-')) {
+                import('../../services/localStore').then(({ listProjects, updateProject }) => {
+                    const existing = listProjects().find(p => p.id === projectId);
+                    if (existing && existing.buildings && existing.buildings[objectId]) {
+                        const updatedBuildings = { ...existing.buildings };
+                        updatedBuildings[objectId] = {
+                            ...updatedBuildings[objectId],
+                            objectSecurityPlan: planSections
+                        };
+                        updateProject({ ...existing, buildings: updatedBuildings, lastModified: new Date().toISOString() });
+                        setSavingStatus('Uloženo');
+                    }
+                });
+                return;
+            }
+
+            if (!db) return;
             const docRef = doc(db, 'projects', projectId, 'buildings', objectId);
             await setDoc(docRef, {
                 objectSecurityPlan: planSections
@@ -138,7 +167,7 @@ function ObjectSecurityPlan() {
                     <Tab label="Systém informování" />
                 </Tabs>
             </Box>
-            
+
             <EditorWrapper sx={{ border: 1, borderColor: 'divider', borderRadius: '0 0 4px 4px' }}>
                 <MenuBar editor={editor} />
                 <EditorContent editor={editor} />

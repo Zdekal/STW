@@ -3,21 +3,22 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Link } from 'react-router-dom';
-import { 
-  Paper, 
-  Typography, 
-  List, 
-  ListItemText, 
-  ListItemIcon, 
-  ListItemButton, 
-  Divider, 
-  Chip 
+import {
+  Paper,
+  Typography,
+  List,
+  ListItemText,
+  ListItemIcon,
+  ListItemButton,
+  Divider,
+  Chip
 } from '@mui/material';
-import { 
-  ArrowForwardIos, 
-  Hub, 
-  AdminPanelSettings, 
-  GppGood 
+import {
+  ArrowForwardIos,
+  Hub,
+  AdminPanelSettings,
+  GppGood,
+  Warning
 } from '@mui/icons-material';
 
 /**
@@ -28,7 +29,7 @@ import {
 function Settings() {
   // Získání aktuálně přihlášeného uživatele z kontextu
   const { currentUser } = useAuth();
-  
+
   // Zjištění, zda má uživatel administrátorská práva pomocí custom claims.
   // Otazník (?) zajišťuje, že se kód nepokusí číst 'claims' z 'undefined', pokud currentUser ještě není načten.
   const isUserAdmin = currentUser?.claims?.admin === true;
@@ -39,7 +40,7 @@ function Settings() {
       <Typography variant="h4" component="h1" className="font-bold text-gray-800">
         Nastavení
       </Typography>
-      
+
       {/* Sekce s informacemi o účtu */}
       <Paper elevation={2} className="p-6 rounded-lg">
         <Typography variant="h6" component="h2" className="font-semibold mb-4">
@@ -49,7 +50,7 @@ function Settings() {
           <div className="space-y-2">
             <p><span className="font-semibold">E-mail:</span> {currentUser.email}</p>
             <p>
-              <span className="font-semibold">User ID:</span> 
+              <span className="font-semibold">User ID:</span>
               <code className="text-sm bg-gray-200 p-1 rounded ml-2">{currentUser.uid}</code>
             </p>
           </div>
@@ -64,17 +65,26 @@ function Settings() {
           Správa dat
         </Typography>
         <List>
-            {/* Odkaz pro běžné uživatele */}
-            <ListItemButton component={Link} to="/settings/risk-mapping" className="rounded-lg">
-                <ListItemIcon><Hub /></ListItemIcon>
-                <ListItemText 
-                  primary="Moje knihovna opatření" 
-                  secondary="Správa vaší osobní knihovny rizik a bezpečnostních opatření"
-                />
-                <ArrowForwardIos sx={{ color: 'grey.500' }} />
-            </ListItemButton>
+          {/* Odkaz pro běžné uživatele */}
+          <ListItemButton component={Link} to="/settings/risk-mapping" className="rounded-lg" sx={{ mb: 1 }}>
+            <ListItemIcon><Hub /></ListItemIcon>
+            <ListItemText
+              primary="Moje knihovna opatření"
+              secondary="Správa vaší osobní knihovny rizik a bezpečnostních opatření"
+            />
+            <ArrowForwardIos sx={{ color: 'grey.500' }} />
+          </ListItemButton>
+
+          <ListItemButton component={Link} to="/settings/my-project-risks" className="rounded-lg">
+            <ListItemIcon><Warning /></ListItemIcon>
+            <ListItemText
+              primary="Moje výchozí hodnoty analýzy ohroženosti"
+              secondary="Úprava vlastních výchozích skóre rizik pro budoucí projekty a akce"
+            />
+            <ArrowForwardIos sx={{ color: 'grey.500' }} />
+          </ListItemButton>
         </List>
-        
+
         {/* Podmíněně zobrazená sekce pouze pro administrátory */}
         {isUserAdmin && (
           <>
@@ -82,24 +92,33 @@ function Settings() {
               <Chip label="Administrátor" size="small" />
             </Divider>
             <List>
-                {/* Odkaz na správu globální knihovny */}
-                <ListItemButton component={Link} to="/settings/global-risk-mapping" className="rounded-lg" sx={{ mb: 1 }}>
-                    <ListItemIcon><AdminPanelSettings /></ListItemIcon>
-                    <ListItemText 
-                      primary="Správa globální knihovny opatření" 
-                      secondary="Úprava sdílené knihovny opatření pro akce"
-                    />
-                    <ArrowForwardIos sx={{ color: 'grey.500' }} />
-                </ListItemButton>
-                {/* Odkaz na správu globálních hrozeb */}
-                <ListItemButton component={Link} to="/settings/global-object-threats" className="rounded-lg">
-                    <ListItemIcon><GppGood /></ListItemIcon>
-                    <ListItemText 
-                      primary="Správa hrozeb pro objekty" 
-                      secondary="Úprava globální šablony hrozeb pro objekty a kampusy"
-                    />
-                    <ArrowForwardIos sx={{ color: 'grey.500' }} />
-                </ListItemButton>
+              {/* Odkaz na správu globální knihovny */}
+              <ListItemButton component={Link} to="/settings/global-risk-mapping" className="rounded-lg" sx={{ mb: 1 }}>
+                <ListItemIcon><AdminPanelSettings /></ListItemIcon>
+                <ListItemText
+                  primary="Správa globální knihovny opatření"
+                  secondary="Úprava sdílené knihovny opatření pro akce"
+                />
+                <ArrowForwardIos sx={{ color: 'grey.500' }} />
+              </ListItemButton>
+              {/* Odkaz na správu výchozích rizik pro projekty/akce */}
+              <ListItemButton component={Link} to="/settings/global-project-risks" className="rounded-lg" sx={{ mb: 1 }}>
+                <ListItemIcon><Warning /></ListItemIcon>
+                <ListItemText
+                  primary="Globální hodnoty analýzy ohroženosti"
+                  secondary="Úprava výchozích hodnot rizik pro prázdné nebo nové projekty a akce"
+                />
+                <ArrowForwardIos sx={{ color: 'grey.500' }} />
+              </ListItemButton>
+              {/* Odkaz na správu globálních hrozeb */}
+              <ListItemButton component={Link} to="/settings/global-object-threats" className="rounded-lg">
+                <ListItemIcon><GppGood /></ListItemIcon>
+                <ListItemText
+                  primary="Správa globální knihovny hrozeb"
+                  secondary="Základní seznam rizik a šablona hrozeb pro objekty a areály"
+                />
+                <ArrowForwardIos sx={{ color: 'grey.500' }} />
+              </ListItemButton>
             </List>
           </>
         )}

@@ -17,21 +17,74 @@ ChartJS.register(LinearScale, PointElement, LineElement, Tooltip, Legend);
 
 function RiskMatrix({ threats }) {
 
-  // Připravíme data do formátu, kterému graf rozumí
+  // 1. Seskupíme hrozby se stejnými souřadnicemi
+  const groupedData = {};
+  if (Array.isArray(threats)) {
+    threats
+      .filter(threat => threat && typeof threat === 'object')
+      .forEach(threat => {
+        const availability = Number(threat.availability) || 1;
+        const occurrence = Number(threat.occurrence) || 1;
+        const complexity = Number(threat.complexity) || 1;
+        const lifeAndHealth = Number(threat.lifeAndHealth) || 1;
+        const facility = Number(threat.facility) || 1;
+        const financial = Number(threat.financial) || 1;
+        const community = Number(threat.community) || 1;
+
+        const x = availability + occurrence + complexity;
+        const y = lifeAndHealth + facility + financial + community;
+        const key = `${x}-${y}`;
+
+        if (!groupedData[key]) {
+          groupedData[key] = { x, y, names: [], count: 0 };
+        }
+        groupedData[key].names.push(typeof threat.name === 'string' ? threat.name : 'Neznámá hrozba');
+        groupedData[key].count += 1;
+      });
+  }
+
+  // Převod na pole pro ChartJS
+  const mappedData = Object.values(groupedData).map(group => {
+    const score = group.x * group.y;
+    // Určení priority / barvy podle skóre
+    let color = 'rgba(34, 197, 94, 0.8)'; // Nízké (Zelená)
+    let priorityName = 'Nízká priorita';
+    
+    if (score >= 300) { color = 'rgba(225, 29, 72, 0.8)'; priorityName = 'Kritické riziko'; }
+    else if (score >= 150) { color = 'rgba(249, 115, 22, 0.8)'; priorityName = 'Vysoké riziko'; }
+    else if (score >= 50) { color = 'rgba(234, 179, 8, 0.8)'; priorityName = 'Střední riziko'; }
+
+    return {
+      x: group.x,
+      y: group.y,
+      names: group.names,
+      count: group.count,
+      score: score,
+      color: color,
+      priorityName: priorityName
+    };
+  });
+
   const data = {
     datasets: [{
       label: 'Hrozby',
-      data: threats.map(threat => ({
-        // Osa X: Součet bodů za pravděpodobnost
-        x: (threat.availability || 1) + (threat.occurrence || 1) + (threat.complexity || 1),
-        // Osa Y: Součet bodů za dopad
-        y: (threat.lifeAndHealth || 1) + (threat.facility || 1) + (threat.financial || 1) + (threat.community || 1),
-        // Extra data pro zobrazení v tooltipu
-        name: threat.name
-      })),
-      backgroundColor: 'rgba(255, 99, 132, 0.8)',
-      pointRadius: 8,
-      pointHoverRadius: 12,
+      data: mappedData,
+      backgroundColor: (context) => {
+        const point = context.raw;
+        return point ? point.color : 'rgba(255, 99, 132, 0.8)';
+      },
+      // Zvětšení poloměru s každým dalším rizikem (základ 8, za každé navíc + 3)
+      pointRadius: (context) => {
+        const point = context.raw;
+        if (!point) return 8;
+        return 8 + (point.count - 1) * 3;
+      },
+      // Hover efekt o něco větší
+      pointHoverRadius: (context) => {
+        const point = context.raw;
+        if (!point) return 12;
+        return 12 + (point.count - 1) * 4;
+      },
     }],
   };
 
@@ -65,10 +118,17 @@ function RiskMatrix({ threats }) {
       },
       tooltip: {
         callbacks: {
-          // Vlastní formát pro tooltip, který se ukáže po najetí myší
-          label: function(context) {
+          label: function (context) {
             const point = context.raw;
-            return `${point.name}: (Pravděpodobnost: ${point.x}, Dopad: ${point.y})`;
+            // Vrátíme pole řádků pro Tooltip
+            let lines = [
+                `Počet rizik v bodě: ${point.count}`,
+                `Závažnost: ${point.priorityName} (Skóre: ${point.score})`,
+                `Pravděpodobnost: ${point.x} | Dopad: ${point.y}`,
+                '-------------------------'
+            ];
+            point.names.forEach(n => lines.push(`• ${n}`));
+            return lines;
           }
         }
       }
