@@ -26,14 +26,55 @@ const defaultStaffMembers = [
     { id: uuidv4(), ktRole: "Zapisovatel", description: "Zaznamenává klíčové informace a rozhodnutí v KC.", name: "Ad hoc", eventFunction: "", phone: "", crisisPhone: "", email: "", isDefault: true },
 ];
 
-// Migrate old format (role field) to new format (ktRole field)
+// Aliasy starších názvů pozic → kanonický název v defaultStaffMembers.
+// Používá se pro deduplikaci a párování při importu šablony.
+const ktRoleAliases = {
+    'Předseda': 'Předseda KT',
+    'Manažer krizového týmu': 'Krizový manažer',
+    'Krizový manažer koordinačního týmu': 'Krizový manažer',
+    'Sport. koordinátor': 'Sportovní koordinátor',
+    'Sportovní': 'Sportovní koordinátor',
+    'Koord. s IZS': 'Koordinátor s IZS',
+    'IZS': 'Koordinátor s IZS',
+    'Bezpečnost': 'Tým bezpečnosti',
+    'Interní': 'Interní komunikace',
+    'Externí': 'Externí komunikace (PR)',
+    'PR': 'Externí komunikace (PR)',
+    'Komunikace (PR)': 'Externí komunikace (PR)',
+    'Zdravotně-psych. pomoc': 'Zdravotně-psychologická pomoc',
+    'Logistika': 'Logistika a IT',
+    'IT': 'Logistika a IT',
+    'Koord. v místě': 'Koordinátor v místě incidentu',
+};
+
+const canonicalKtRole = (role) => {
+    if (!role) return '';
+    return ktRoleAliases[role.trim()] || role.trim();
+};
+
+// Migrate old format (role field) to new format (ktRole field) + canonicalize role names.
 function migrateMembers(members) {
     return members.map(m => ({
         ...m,
-        ktRole: m.ktRole || m.role || '',
+        ktRole: canonicalKtRole(m.ktRole || m.role || ''),
         eventFunction: m.eventFunction || '',
         crisisPhone: m.crisisPhone || '',
     }));
+}
+
+// Odstraní duplicitní pozice (stejný kanonický ktRole) – ponechá tu, která má nejvíc vyplněných polí.
+function dedupeMembers(members) {
+    const byRole = new Map();
+    for (const m of members) {
+        const role = canonicalKtRole(m.ktRole);
+        const fillScore = ['name', 'eventFunction', 'phone', 'crisisPhone', 'email']
+            .filter(k => (m[k] || '').toString().trim().length > 0).length;
+        const existing = byRole.get(role);
+        if (!existing || fillScore > existing._score) {
+            byRole.set(role, { ...m, ktRole: role, _score: fillScore });
+        }
+    }
+    return Array.from(byRole.values()).map(({ _score, ...rest }) => rest);
 }
 
 const SaveStatusIndicator = ({ status }) => {
@@ -49,6 +90,7 @@ function ProjectTeam() {
     const [plan, setPlan] = useState(null);
     const [projectRisks, setProjectRisks] = useState([]);
     const [projectDates, setProjectDates] = useState([]);
+    const [projectMeta, setProjectMeta] = useState({});
     const [riskProcedures, setRiskProcedures] = useState({});
     const [loading, setLoading] = useState(true);
     const [saveStatus, setSaveStatus] = useState('Načteno');
@@ -61,6 +103,12 @@ function ProjectTeam() {
             setProjectRisks(data.customRisks || data.risks || []);
             setRiskProcedures(data.riskProcedures || {});
             setProjectDates(data.dates || []);
+            setProjectMeta({
+                organizer: data.organizer || '',
+                officialName: data.officialName || '',
+                audienceSize: data.audienceSize || '',
+                author: data.author || '',
+            });
 
             const defaults = {
                 staffMembers: defaultStaffMembers,
@@ -74,8 +122,14 @@ function ProjectTeam() {
             };
             if (data.crisisStaffPlan) {
                 const sp = data.crisisStaffPlan;
+                const raw = migrateMembers(sp.staffMembers || defaults.staffMembers);
+                const deduped = dedupeMembers(raw);
+                // Pokud dedup/canonicalizace něco změnily, označ stav pro uložení.
+                if (deduped.length !== raw.length || deduped.some((m, i) => m.ktRole !== raw[i]?.ktRole)) {
+                    userEdited.current = true;
+                }
                 setPlan({
-                    staffMembers: migrateMembers(sp.staffMembers || defaults.staffMembers),
+                    staffMembers: deduped,
                     activationMethod: sp.activationMethod || defaults.activationMethod,
                     activationAuthority: sp.activationAuthority || defaults.activationAuthority,
                     incidentTriggers: sp.incidentTriggers || defaults.incidentTriggers,
@@ -135,6 +189,32 @@ function ProjectTeam() {
     const triggerableRisks = useMemo(() => {
         return projectRisks.filter(risk => riskProcedures[risk.id]?.activateCoordTeam === true);
     }, [projectRisks, riskProcedures]);
+
+    // Odvozené hodnoty pro sekci 6 (Základní údaje pro PČR a HZS) ze Základních údajů o akci.
+    // Pokud uživatel pole vyplní ručně, jeho hodnota má vždy přednost. Pole bez zdroje zůstávají prázdná.
+    const derivedPcrHzs = useMemo(() => {
+        const out = {};
+        if (!plan) return out;
+
+        if (projectMeta.organizer) out.orgName = projectMeta.organizer;
+        if (projectMeta.audienceSize) out.expectedPersons = String(projectMeta.audienceSize);
+
+        const uniqLocs = [...new Set((projectDates || []).map(d => d.location).filter(Boolean))];
+        if (uniqLocs.length) out.eventAddress = uniqLocs.join('; ');
+
+        // Primární kontaktní osoba pro IZS: Krizový manažer → Předseda KT → Koord. s IZS
+        const primary = ['Krizový manažer', 'Předseda KT', 'Koordinátor s IZS']
+            .map(role => plan.staffMembers.find(m => canonicalKtRole(m.ktRole) === role && (m.name || '').trim()))
+            .find(Boolean);
+        if (primary?.name) {
+            out.contactPerson = primary.eventFunction
+                ? `${primary.name} (${primary.eventFunction})`
+                : primary.name;
+        }
+        if (primary?.phone) out.contactPhone = primary.phone;
+
+        return out;
+    }, [plan, projectMeta, projectDates]);
 
     const saveData = useCallback(async (dataToSave) => {
         if (!dataToSave || !projectId) return;
@@ -246,24 +326,26 @@ function ProjectTeam() {
 
     const applyTemplate = (tpl) => {
         setPlan(prev => {
-            // Merge staff members by ktRole: template overwrites matching roles,
+            // Merge staff members by canonical ktRole: template overwrites matching roles,
             // new roles get appended, existing roles not in template are kept.
-            const existingByRole = new Map(prev.staffMembers.map(m => [m.ktRole, m]));
+            const existingByRole = new Map(prev.staffMembers.map(m => [canonicalKtRole(m.ktRole), m]));
             const mergedStaff = [];
             const consumedRoles = new Set();
 
             for (const tplMember of tpl.staffMembers) {
-                const existing = existingByRole.get(tplMember.ktRole);
+                const canonRole = canonicalKtRole(tplMember.ktRole);
+                const existing = existingByRole.get(canonRole);
                 mergedStaff.push({
                     ...existing,
                     ...tplMember,
+                    ktRole: canonRole,
                     id: existing?.id || uuidv4(),
                     isDefault: existing?.isDefault ?? true,
                 });
-                consumedRoles.add(tplMember.ktRole);
+                consumedRoles.add(canonRole);
             }
             for (const existing of prev.staffMembers) {
-                if (!consumedRoles.has(existing.ktRole)) mergedStaff.push(existing);
+                if (!consumedRoles.has(canonicalKtRole(existing.ktRole))) mergedStaff.push(existing);
             }
 
             // Map incident trigger names → existing project risk IDs
@@ -444,11 +526,11 @@ function ProjectTeam() {
                                             <Typography variant="caption" color="text.secondary">{member.description}</Typography>
                                         )}
                                         <Box sx={{ flex: 1 }} />
-                                        {!member.isDefault && (
+                                        <Tooltip title="Odstranit pozici">
                                             <IconButton size="small" onClick={() => handleRemoveMember(member.id)} sx={{ opacity: 0.4, '&:hover': { opacity: 1, color: '#ef4444' } }}>
                                                 <Close sx={{ fontSize: 16 }} />
                                             </IconButton>
-                                        )}
+                                        </Tooltip>
                                     </Box>
                                     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', lg: '1fr 1fr 1fr 1fr 1fr' }, gap: 1.5 }}>
                                         <TextField
@@ -780,22 +862,30 @@ function ProjectTeam() {
                             { key: 'expectedPersons', label: 'Očekávaný maximální počet osob' },
                             { key: 'securityLevel', label: 'Úroveň bezpečnostní připravenosti' },
                             { key: 'cooperationIZS', label: 'Forma spolupráce s IZS' },
-                        ].map(f => (
-                            <TextField
-                                key={f.key}
-                                label={f.label}
-                                fullWidth variant="outlined" size="small"
-                                value={(plan.pcrHzsInfo || {})[f.key] || ''}
-                                onChange={(e) => {
-                                    userEdited.current = true;
-                                    setPlan(prev => ({
-                                        ...prev,
-                                        pcrHzsInfo: { ...(prev.pcrHzsInfo || {}), [f.key]: e.target.value },
-                                    }));
-                                }}
-                                InputProps={{ sx: { borderRadius: 2 } }}
-                            />
-                        ))}
+                        ].map(f => {
+                            const stored = (plan.pcrHzsInfo || {})[f.key];
+                            const hasStored = stored !== undefined && stored !== null && stored !== '';
+                            const displayed = hasStored ? stored : (derivedPcrHzs[f.key] || '');
+                            const isDerived = !hasStored && Boolean(derivedPcrHzs[f.key]);
+                            return (
+                                <TextField
+                                    key={f.key}
+                                    label={f.label}
+                                    fullWidth variant="outlined" size="small"
+                                    value={displayed}
+                                    onChange={(e) => {
+                                        userEdited.current = true;
+                                        setPlan(prev => ({
+                                            ...prev,
+                                            pcrHzsInfo: { ...(prev.pcrHzsInfo || {}), [f.key]: e.target.value },
+                                        }));
+                                    }}
+                                    helperText={isDerived ? 'Automaticky převzato ze Základních údajů – můžete přepsat' : undefined}
+                                    FormHelperTextProps={{ sx: { fontSize: '0.7rem', color: '#64748b', mt: 0.25 } }}
+                                    InputProps={{ sx: { borderRadius: 2 } }}
+                                />
+                            );
+                        })}
                     </Box>
                 </Box>
             </Paper>
