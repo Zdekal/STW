@@ -17,6 +17,21 @@ const pageStyle = {
 };
 
 // --- Komponenty ---
+const PageHeader = ({ docTitle }) => (
+    <Box sx={{
+        position: 'absolute', top: '0.7cm', left: '1.5cm', right: '1.5cm',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        paddingBottom: '6px', borderBottom: '1px solid #cbd5e1',
+    }}>
+        <Box component="img" src="/logo-stt.png" alt="logo" sx={{ height: '36px', width: 'auto' }} />
+        {docTitle ? (
+            <Typography variant="caption" sx={{ color: '#64748B', fontFamily: '"Times New Roman", serif' }}>
+                {docTitle}
+            </Typography>
+        ) : null}
+    </Box>
+);
+
 const PageFooter = ({ currentPage, totalPages }) => (
     <Box sx={{ position: 'absolute', bottom: '1.5cm', left: 0, right: 0, textAlign: 'center' }}>
         <Typography variant="caption" color="text.secondary">Strana {currentPage} / {totalPages}</Typography>
@@ -363,7 +378,8 @@ function PlanDocumentA4() {
             <Box className="printable-area">
                 {allPages.map((pageBlocks, pageIndex) => (
                     <Paper key={pageIndex} sx={pageStyle}>
-                        <Box sx={{ flexGrow: 1 }}>
+                        <PageHeader docTitle={project?.officialName || project?.name || ''} />
+                        <Box sx={{ flexGrow: 1, pt: '1.2cm' }}>
                             {pageBlocks.map((block) => {
                                 const absoluteIndex = blocks.indexOf(block);
                                 return (

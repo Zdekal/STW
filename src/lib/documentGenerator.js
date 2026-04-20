@@ -4,9 +4,24 @@
 import {
     Document, Packer, Paragraph, HeadingLevel, TextRun, AlignmentType, PageBreak,
     Table, TableRow, TableCell, WidthType, BorderStyle, ShadingType,
-    Header, Footer, PageNumber, VerticalAlign, HeightRule,
+    Header, Footer, PageNumber, VerticalAlign, HeightRule, ImageRun,
 } from 'docx';
 import { toBand, SUBFACTOR_BANDS } from './risks';
+
+// URL loga pro hlavičku DOCX (musí být v public/). Fallback: bez loga.
+const LOGO_URL = '/logo-stt.png';
+const LOGO_WIDTH = 120; // px v headeru (poměr stran ~2.75:1 → výška ~44)
+const LOGO_HEIGHT = 44;
+
+async function loadLogoBuffer() {
+    try {
+        const res = await fetch(LOGO_URL);
+        if (!res.ok) return null;
+        return await res.arrayBuffer();
+    } catch {
+        return null;
+    }
+}
 
 // Klasický serif font pro celý dokument — lépe odpovídá formálnímu stylu
 // bezpečnostních dokumentů (vs. moderní Calibri).
@@ -1148,6 +1163,62 @@ export async function generateDocument(template, project) {
 
     const eventLabel = project.officialName || project.name || '';
     const docTitle = template.title || '';
+    const logoBuffer = await loadLogoBuffer();
+
+    const headerChildren = [];
+    if (logoBuffer) {
+        // Dvousloupcová tabulka: vlevo logo, vpravo texty (název dokumentu + název akce)
+        headerChildren.push(new Table({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            borders: noBorders(),
+            rows: [new TableRow({
+                children: [
+                    new TableCell({
+                        width: { size: 35, type: WidthType.PERCENTAGE },
+                        borders: noBorders(),
+                        verticalAlign: VerticalAlign.CENTER,
+                        margins: { top: 0, bottom: 0, left: 0, right: 0 },
+                        children: [new Paragraph({
+                            children: [new ImageRun({
+                                data: logoBuffer,
+                                transformation: { width: LOGO_WIDTH, height: LOGO_HEIGHT },
+                            })],
+                        })],
+                    }),
+                    new TableCell({
+                        width: { size: 65, type: WidthType.PERCENTAGE },
+                        borders: noBorders(),
+                        verticalAlign: VerticalAlign.CENTER,
+                        margins: { top: 0, bottom: 0, left: 0, right: 0 },
+                        children: [
+                            new Paragraph({
+                                alignment: AlignmentType.RIGHT,
+                                children: [new TextRun({ text: docTitle, size: 18, color: '64748B', font: DOC_FONT })],
+                            }),
+                            ...(eventLabel ? [new Paragraph({
+                                alignment: AlignmentType.RIGHT,
+                                children: [new TextRun({ text: eventLabel, size: 18, color: '334155', bold: true, font: DOC_FONT })],
+                            })] : []),
+                        ],
+                    }),
+                ],
+            })],
+        }));
+        headerChildren.push(new Paragraph({
+            border: { bottom: { color: 'CBD5E1', space: 4, style: BorderStyle.SINGLE, size: 6 } },
+            children: [new TextRun({ text: '', size: 2 })],
+        }));
+    } else {
+        // Fallback bez loga: jen text vpravo
+        headerChildren.push(new Paragraph({
+            alignment: AlignmentType.RIGHT,
+            border: { bottom: { color: 'CBD5E1', space: 4, style: BorderStyle.SINGLE, size: 6 } },
+            children: [
+                new TextRun({ text: docTitle, size: 18, color: '64748B', font: DOC_FONT }),
+                ...(eventLabel ? [new TextRun({ text: '  ·  ', size: 18, color: 'CBD5E1', font: DOC_FONT }), new TextRun({ text: eventLabel, size: 18, color: '334155', bold: true, font: DOC_FONT })] : []),
+            ],
+        }));
+    }
 
     const docFile = new Document({
         creator: project.author || 'Event Security Planner',
@@ -1173,18 +1244,7 @@ export async function generateDocument(template, project) {
                 },
             },
             headers: {
-                default: new Header({
-                    children: [new Paragraph({
-                        alignment: AlignmentType.RIGHT,
-                        border: {
-                            bottom: { color: 'CBD5E1', space: 4, style: BorderStyle.SINGLE, size: 6 },
-                        },
-                        children: [
-                            new TextRun({ text: docTitle, size: 18, color: '64748B', font: DOC_FONT }),
-                            ...(eventLabel ? [new TextRun({ text: '  ·  ', size: 18, color: 'CBD5E1', font: DOC_FONT }), new TextRun({ text: eventLabel, size: 18, color: '334155', bold: true, font: DOC_FONT })] : []),
-                        ],
-                    })],
-                }),
+                default: new Header({ children: headerChildren }),
             },
             footers: {
                 default: new Footer({
