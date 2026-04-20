@@ -44,6 +44,28 @@ const categoryIcons = {
     Groups: <Groups />,
 };
 
+// Synchronní záloha rozpracovaných změn do localStorage.
+// Přežije refresh stránky i v případě, že debouncovaný autosave do Firestore
+// ještě nestihl odeslat zápis (async setDoc prohlížeč při beforeunload nečeká).
+const PENDING_PREFIX = 'esp_pending_basic_';
+
+const readPendingSnapshot = (projectId) => {
+    try {
+        const raw = localStorage.getItem(PENDING_PREFIX + projectId);
+        return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+};
+
+const writePendingSnapshot = (projectId, data) => {
+    try {
+        localStorage.setItem(PENDING_PREFIX + projectId, JSON.stringify({ data, savedAt: Date.now() }));
+    } catch { /* quota / privacy mode — ignore */ }
+};
+
+const clearPendingSnapshot = (projectId) => {
+    try { localStorage.removeItem(PENDING_PREFIX + projectId); } catch { /* ignore */ }
+};
+
 // Komponenta pro zobrazení stavu ukládání (beze změny)
 const SaveStatusIndicator = ({ status }) => {
     if (status === 'Uloženo') return <Chip icon={<CloudDone />} label="Všechny změny uloženy" size="small" />;
@@ -137,7 +159,6 @@ function ProjectBasic() {
             import('../../services/localStore').then(({ listProjects }) => {
                 const lp = listProjects().find(p => p.id === projectId);
                 if (lp) {
-                    setTeams(lp.projectTeamStructure || defaultTeamCategories);
                     const localData = {
                         name: lp.name || '',
                         officialName: lp.officialName || '',
@@ -156,9 +177,22 @@ function ProjectBasic() {
                         documents: lp.documents || [],
                         selectedVulnerabilities: lp.selectedVulnerabilities || [],
                     };
-                    setFormData(localData);
-                    latestDataRef.current = localData;
-                    if (saveStatus === 'Načteno') setSaveStatus('Uloženo');
+
+                    // Rozpracovaná záloha má přednost, pokud je novější než zapsaný
+                    // stav v localStore (async dynamic import při unloadu nemusí doběhnout).
+                    const pending = readPendingSnapshot(projectId);
+                    const lpUpdatedAt = lp.updatedAt || 0;
+                    if (pending && pending.savedAt > lpUpdatedAt) {
+                        setTeams(pending.data.projectTeamStructure || defaultTeamCategories);
+                        setFormData(pending.data);
+                        latestDataRef.current = pending.data;
+                        setSaveStatus('Ukládám...');
+                    } else {
+                        setTeams(lp.projectTeamStructure || defaultTeamCategories);
+                        setFormData(localData);
+                        latestDataRef.current = localData;
+                        if (saveStatus === 'Načteno') setSaveStatus('Uloženo');
+                    }
                 } else {
                     console.error("Lokální projekt nenalezen!");
                 }
@@ -196,6 +230,20 @@ function ProjectBasic() {
                     documents: data.documents || [],
                     selectedVulnerabilities: data.selectedVulnerabilities || [],
                 };
+
+                // Rozpracované změny z předchozí session mají přednost, pokud jsou novější
+                // než poslední zápis na server (stránka byla obnovena před doběhnutím autosave).
+                const pending = readPendingSnapshot(projectId);
+                const serverLastEdited = data.lastEdited?.toMillis?.() ?? 0;
+                if (pending && pending.savedAt > serverLastEdited) {
+                    setTeams(pending.data.projectTeamStructure || defaultTeamCategories);
+                    setFormData(pending.data);
+                    latestDataRef.current = pending.data;
+                    setSaveStatus('Ukládám...');
+                    setLoading(false);
+                    return;
+                }
+
                 // Nepřepisuj lokální data, pokud uživatel právě edituje nebo jsme právě uložili
                 // (onSnapshot po uložení může přijít se zpožděním a přepsat lokální změny)
                 const timeSinceLastSave = Date.now() - lastSaveTime.current;
@@ -266,27 +314,40 @@ function ProjectBasic() {
         if (!formData || saveStatus !== 'Ukládám...') return;
         const handler = setTimeout(async () => {
             if (!latestDataRef.current) return;
+            // Zachytíme referenci na data, která se právě ukládají.
+            // Pokud během await uživatel píše dál, latestDataRef se změní —
+            // pak nesmíme smazat snapshot ani přepnout stav na "Uloženo",
+            // jinak by se nové změny ztratily (debounce byl zrušen při re-runu effectu).
+            const dataBeingSaved = latestDataRef.current;
             try {
                 if (projectId.startsWith('local-')) {
                     import('../../services/localStore').then(({ listProjects, updateProject }) => {
                         const existing = listProjects().find(p => p.id === projectId) || {};
-                        updateProject({ ...existing, ...latestDataRef.current });
-                        lastSaveTime.current = Date.now();
-                        setSaveStatus('Uloženo');
+                        updateProject({ ...existing, ...dataBeingSaved, updatedAt: Date.now() });
+                        if (latestDataRef.current === dataBeingSaved) {
+                            lastSaveTime.current = Date.now();
+                            clearPendingSnapshot(projectId);
+                            setSaveStatus('Uloženo');
+                        }
                     });
                     return;
                 }
 
                 if (!db) return;
                 const projectRef = doc(db, 'projects', projectId);
-                await setDoc(projectRef, { ...latestDataRef.current, lastEdited: serverTimestamp() }, { merge: true });
-                lastSaveTime.current = Date.now();
-                setSaveStatus('Uloženo');
+                await setDoc(projectRef, { ...dataBeingSaved, lastEdited: serverTimestamp() }, { merge: true });
+                if (latestDataRef.current === dataBeingSaved) {
+                    lastSaveTime.current = Date.now();
+                    clearPendingSnapshot(projectId);
+                    setSaveStatus('Uloženo');
+                }
+                // Jinak: uživatel mezitím psal, snapshot i saveStatus zůstává — další
+                // debounce už je naplánovaný díky re-runu effectu po změně formData.
             } catch (error) {
                 console.error("Chyba při automatickém ukládání: ", error);
                 setSaveStatus('Chyba');
             }
-        }, 1500);
+        }, 800);
         return () => clearTimeout(handler);
     }, [formData, projectId, saveStatus]);
 
@@ -314,11 +375,13 @@ function ProjectBasic() {
         };
     }, [saveStatus, projectId]);
 
-    // Aktualizace stavu (beze změny)
+    // Aktualizace stavu + synchronní záloha do localStorage, aby se rozepsané
+    // změny neztratily při F5 dřív, než stihne debouncovaný autosave doběhnout.
     const updateFormData = (updater) => {
         setFormData(prevData => {
             const newData = typeof updater === 'function' ? updater(prevData) : updater;
             latestDataRef.current = newData;
+            if (projectId) writePendingSnapshot(projectId, newData);
             return newData;
         });
         setSaveStatus('Ukládám...');
