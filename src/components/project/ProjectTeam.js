@@ -4,10 +4,13 @@ import { db } from '../../firebase';
 import { doc, onSnapshot, updateDoc, serverTimestamp } from 'firebase/firestore';
 import {
     Typography, Box, TextField, CircularProgress, Chip, Button, IconButton, Paper, Avatar, Tooltip,
-    Radio, RadioGroup, FormControlLabel
+    Radio, RadioGroup, FormControlLabel,
+    Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
+    Menu, MenuItem, Alert
 } from '@mui/material';
-import { CloudDone, AddCircleOutline, Close, Person, Phone, Email, PhoneAndroid, Badge, LocationOn } from '@mui/icons-material';
+import { CloudDone, AddCircleOutline, Close, Person, Phone, Email, PhoneAndroid, Badge, LocationOn, FileDownload } from '@mui/icons-material';
 import { v4 as uuidv4 } from 'uuid';
+import { availableTemplates } from '../../config/templates/czechTour2024';
 
 const defaultStaffMembers = [
     { id: uuidv4(), ktRole: "Předseda KT", description: "Reprezentuje tým navenek, má rozhodující slovo.", name: "", eventFunction: "", phone: "", crisisPhone: "", email: "", isDefault: true },
@@ -228,6 +231,83 @@ function ProjectTeam() {
         setPlan(prev => ({ ...prev, coordinationCenters: prev.coordinationCenters.filter(c => c.id !== id) }));
     };
 
+    // === Import šablony ===
+    const [templateMenuAnchor, setTemplateMenuAnchor] = useState(null);
+    const [templateToConfirm, setTemplateToConfirm] = useState(null);
+    const [importResult, setImportResult] = useState(null);
+
+    const handleOpenTemplateMenu = (e) => setTemplateMenuAnchor(e.currentTarget);
+    const handleCloseTemplateMenu = () => setTemplateMenuAnchor(null);
+
+    const handlePickTemplate = (tpl) => {
+        setTemplateMenuAnchor(null);
+        setTemplateToConfirm(tpl);
+    };
+
+    const applyTemplate = (tpl) => {
+        setPlan(prev => {
+            // Merge staff members by ktRole: template overwrites matching roles,
+            // new roles get appended, existing roles not in template are kept.
+            const existingByRole = new Map(prev.staffMembers.map(m => [m.ktRole, m]));
+            const mergedStaff = [];
+            const consumedRoles = new Set();
+
+            for (const tplMember of tpl.staffMembers) {
+                const existing = existingByRole.get(tplMember.ktRole);
+                mergedStaff.push({
+                    ...existing,
+                    ...tplMember,
+                    id: existing?.id || uuidv4(),
+                    isDefault: existing?.isDefault ?? true,
+                });
+                consumedRoles.add(tplMember.ktRole);
+            }
+            for (const existing of prev.staffMembers) {
+                if (!consumedRoles.has(existing.ktRole)) mergedStaff.push(existing);
+            }
+
+            // Map incident trigger names → existing project risk IDs
+            const risksByName = new Map(projectRisks.map(r => [r.name, r.id]));
+            const automaticIds = (tpl.incidentTriggerNames?.automatic || [])
+                .map(n => risksByName.get(n)).filter(Boolean);
+            const manualIds = (tpl.incidentTriggerNames?.manual || [])
+                .map(n => risksByName.get(n)).filter(Boolean);
+
+            // Map per-role tasks onto the merged member IDs
+            const newRoleTasks = { ...(prev.roleTasks || {}) };
+            for (const m of mergedStaff) {
+                const tplTask = tpl.roleTasksByRole?.[m.ktRole];
+                if (tplTask) newRoleTasks[m.id] = tplTask;
+            }
+
+            const matchedAuto = automaticIds.length;
+            const matchedManual = manualIds.length;
+            const unmatched = [
+                ...(tpl.incidentTriggerNames?.automatic || []).filter(n => !risksByName.has(n)),
+                ...(tpl.incidentTriggerNames?.manual || []).filter(n => !risksByName.has(n)),
+            ];
+
+            setImportResult({
+                templateLabel: tpl.label,
+                staffCount: tpl.staffMembers.length,
+                matchedAuto,
+                matchedManual,
+                unmatched,
+            });
+
+            return {
+                ...prev,
+                staffMembers: mergedStaff,
+                activationMethod: tpl.activationMethod || prev.activationMethod,
+                activationAuthority: tpl.activationAuthority || prev.activationAuthority,
+                incidentTriggers: { automatic: automaticIds, manual: manualIds },
+                roleTasks: newRoleTasks,
+            };
+        });
+        userEdited.current = true;
+        setTemplateToConfirm(null);
+    };
+
     const getInitials = (name) => {
         if (!name) return '?';
         return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
@@ -246,8 +326,79 @@ function ProjectTeam() {
                         Definice koordinačního týmu, center a pravidel aktivace. Data se automaticky promítnou do dokumentu Koordinační plán.
                     </Typography>
                 </Box>
-                <SaveStatusIndicator status={saveStatus} />
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                    <Tooltip title="Předvyplnit plán ze vzorové šablony (např. Czech Tour 2024). Existující hodnoty se přepíší.">
+                        <Button
+                            size="small"
+                            variant="outlined"
+                            startIcon={<FileDownload sx={{ fontSize: 18 }} />}
+                            onClick={handleOpenTemplateMenu}
+                            sx={{ textTransform: 'none', borderRadius: 2 }}
+                        >
+                            Importovat šablonu
+                        </Button>
+                    </Tooltip>
+                    <Menu
+                        anchorEl={templateMenuAnchor}
+                        open={Boolean(templateMenuAnchor)}
+                        onClose={handleCloseTemplateMenu}
+                    >
+                        {availableTemplates.map(tpl => (
+                            <MenuItem key={tpl.templateId} onClick={() => handlePickTemplate(tpl)}>
+                                <Box>
+                                    <Typography variant="body2" fontWeight={600}>{tpl.label}</Typography>
+                                    <Typography variant="caption" color="text.secondary">{tpl.description}</Typography>
+                                </Box>
+                            </MenuItem>
+                        ))}
+                    </Menu>
+                    <SaveStatusIndicator status={saveStatus} />
+                </Box>
             </Box>
+
+            {/* === Import confirm dialog === */}
+            <Dialog open={Boolean(templateToConfirm)} onClose={() => setTemplateToConfirm(null)} maxWidth="sm" fullWidth>
+                <DialogTitle sx={{ fontWeight: 700 }}>Importovat šablonu?</DialogTitle>
+                <DialogContent>
+                    <DialogContentText sx={{ mb: 2 }}>
+                        Šablona <strong>{templateToConfirm?.label}</strong> přepíše následující části plánu:
+                    </DialogContentText>
+                    <Box component="ul" sx={{ pl: 3, m: 0, color: 'text.secondary', fontSize: '0.9rem' }}>
+                        <li>Jména, funkce a telefony v koordinačním týmu (přiřazené podle pozic)</li>
+                        <li>Způsob svolání koordinačního týmu a kdo může aktivovat plán</li>
+                        <li>Spouštěče incidentů (automatické / na rozhodnutí) – mapováno na rizika v projektu podle názvu</li>
+                        <li>Úkoly pro jednotlivé pozice v KT</li>
+                    </Box>
+                    <Alert severity="info" sx={{ mt: 2, fontSize: '0.85rem' }}>
+                        Nedotčeno zůstane: koordinační centra, komunikační protokol, údaje pro PČR/HZS a doplňkové pozice, které šablona neuvádí.
+                    </Alert>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setTemplateToConfirm(null)}>Zrušit</Button>
+                    <Button variant="contained" onClick={() => applyTemplate(templateToConfirm)}>Importovat</Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* === Import result snackbar-like alert === */}
+            {importResult && (
+                <Alert
+                    severity="success"
+                    onClose={() => setImportResult(null)}
+                    sx={{ borderRadius: 2 }}
+                >
+                    <Typography variant="body2" fontWeight={600}>
+                        Šablona „{importResult.templateLabel}" importována.
+                    </Typography>
+                    <Typography variant="caption" sx={{ display: 'block' }}>
+                        {importResult.staffCount} pozic v KT, {importResult.matchedAuto} automatických spouštěčů a {importResult.matchedManual} manuálních spouštěčů namapováno na rizika v projektu.
+                    </Typography>
+                    {importResult.unmatched.length > 0 && (
+                        <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: '#b45309' }}>
+                            Nenamapováno (rizika nejsou v projektu): {importResult.unmatched.join(', ')}
+                        </Typography>
+                    )}
+                </Alert>
+            )}
 
             {/* === 1. Koordinační tým === */}
             <Paper variant="outlined" sx={{ borderRadius: 3, overflow: 'hidden' }}>
