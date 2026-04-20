@@ -1,30 +1,46 @@
 // src/lib/documentGenerator.js
 // Generátor DOCX dokumentů z dat projektu a šablony.
 
-import { Document, Packer, Paragraph, HeadingLevel, TextRun, AlignmentType, PageBreak } from 'docx';
+import {
+    Document, Packer, Paragraph, HeadingLevel, TextRun, AlignmentType, PageBreak,
+    Table, TableRow, TableCell, WidthType, BorderStyle, ShadingType,
+    Header, Footer, PageNumber, VerticalAlign, HeightRule,
+} from 'docx';
 import { toBand, SUBFACTOR_BANDS } from './risks';
+
+// Klasický serif font pro celý dokument — lépe odpovídá formálnímu stylu
+// bezpečnostních dokumentů (vs. moderní Calibri).
+const DOC_FONT = 'Times New Roman';
+
+// Barvy pásem rizik (fill + kontrastní text), sladěné s UI.
+const BAND_COLORS = {
+    critical: { fill: 'B91C1C', text: 'FFFFFF', label: 'Kritická' },
+    high:     { fill: 'F59E0B', text: '000000', label: 'Vysoká' },
+    medium:   { fill: 'FDE68A', text: '000000', label: 'Střední' },
+    low:      { fill: 'BBF7D0', text: '000000', label: 'Nízká' },
+};
 
 // ── Pomocné funkce ──────────────────────────────────────────────────────
 
 function heading1(text) {
     return new Paragraph({
-        text,
+        children: [new TextRun({ text, bold: true, size: 32, font: DOC_FONT })],
         heading: HeadingLevel.HEADING_1,
-        spacing: { before: 400, after: 200 },
+        spacing: { before: 360, after: 200 },
     });
 }
 
 function heading2(text) {
     return new Paragraph({
-        text,
+        children: [new TextRun({ text, bold: true, size: 26, font: DOC_FONT })],
         heading: HeadingLevel.HEADING_2,
-        spacing: { before: 300, after: 150 },
+        spacing: { before: 280, after: 140 },
     });
 }
 
 function heading3(text) {
     return new Paragraph({
-        text,
+        children: [new TextRun({ text, bold: true, size: 22, font: DOC_FONT })],
         heading: HeadingLevel.HEADING_3,
         spacing: { before: 200, after: 100 },
     });
@@ -32,14 +48,15 @@ function heading3(text) {
 
 function para(text, options = {}) {
     return new Paragraph({
-        children: [new TextRun({ text, ...options })],
+        children: [new TextRun({ text, font: DOC_FONT, ...options })],
         spacing: { after: 100 },
+        alignment: AlignmentType.JUSTIFIED,
     });
 }
 
 function bulletItem(text) {
     return new Paragraph({
-        text,
+        children: [new TextRun({ text, font: DOC_FONT })],
         bullet: { level: 0 },
         spacing: { after: 60 },
     });
@@ -51,13 +68,57 @@ function emptyLine() {
 
 function placeholderPara(text) {
     return new Paragraph({
-        children: [new TextRun({ text: `[${text}]`, italics: true, color: '999999' })],
+        children: [new TextRun({ text: `[${text}]`, italics: true, color: '999999', font: DOC_FONT })],
         spacing: { after: 100 },
     });
 }
 
 function pageBreak() {
     return new Paragraph({ children: [new PageBreak()] });
+}
+
+// ── Pomocné funkce pro tabulky ──────────────────────────────────────────
+
+function tableHeaderCell(text, widthPct, alignment = AlignmentType.CENTER) {
+    return new TableCell({
+        width: { size: widthPct, type: WidthType.PERCENTAGE },
+        shading: { type: ShadingType.CLEAR, fill: '1F2937' },
+        margins: { top: 80, bottom: 80, left: 100, right: 100 },
+        verticalAlign: VerticalAlign.CENTER,
+        children: [new Paragraph({
+            alignment,
+            children: [new TextRun({ text, bold: true, color: 'FFFFFF', size: 20, font: DOC_FONT })],
+        })],
+    });
+}
+
+function tableDataCell(text, { alignment = AlignmentType.LEFT, bold = false, size = 20 } = {}) {
+    return new TableCell({
+        margins: { top: 60, bottom: 60, left: 100, right: 100 },
+        verticalAlign: VerticalAlign.CENTER,
+        children: [new Paragraph({
+            alignment,
+            children: [new TextRun({ text, size, bold, font: DOC_FONT })],
+        })],
+    });
+}
+
+function tableBandCell(band) {
+    const c = BAND_COLORS[band?.id] || { fill: 'FFFFFF', text: '000000' };
+    return new TableCell({
+        shading: { type: ShadingType.CLEAR, fill: c.fill },
+        margins: { top: 60, bottom: 60, left: 100, right: 100 },
+        verticalAlign: VerticalAlign.CENTER,
+        children: [new Paragraph({
+            alignment: AlignmentType.CENTER,
+            children: [new TextRun({ text: band?.label || '—', bold: true, color: c.text, size: 20, font: DOC_FONT })],
+        })],
+    });
+}
+
+function noBorders() {
+    const none = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
+    return { top: none, bottom: none, left: none, right: none, insideHorizontal: none, insideVertical: none };
 }
 
 // Titulní strana
@@ -161,19 +222,10 @@ function generateRiskSummary(project) {
             return { pSum, dSum, score: pSum * dSum };
         };
 
-        // Spočítat rizika podle pásem
-        const bandCounts = { low: 0, medium: 0, high: 0, critical: 0 };
-        risks.forEach(r => {
-            const { score } = computeScore(r);
-            const band = toBand(score, SUBFACTOR_BANDS);
-            if (band) bandCounts[band.id] = (bandCounts[band.id] || 0) + 1;
-        });
+        // Graf rozložení rizik podle pásem
         items.push(emptyLine());
         items.push(heading3('Rozložení rizik podle pásem'));
-        items.push(bulletItem(`Kritická: ${bandCounts.critical}`));
-        items.push(bulletItem(`Vysoká: ${bandCounts.high}`));
-        items.push(bulletItem(`Střední: ${bandCounts.medium}`));
-        items.push(bulletItem(`Nízká: ${bandCounts.low}`));
+        items.push(...generateRiskDistributionChart(project));
 
         // Prioritní rizika (top 5 by score)
         const sorted = [...risks].sort((a, b) => computeScore(b).score - computeScore(a).score);
@@ -345,6 +397,81 @@ function generateLocationTimingSpecifics(project) {
     return items;
 }
 
+function computeRiskScore(r, isOutdoor) {
+    const p = (Number(r.availability) || 1) + (Number(r.occurrence) || 1) + (Number(r.complexity) || 1);
+    const d = (Number(r.lifeAndHealth) || 1) + (isOutdoor ? 0 : (Number(r.facility) || 1)) + (Number(r.financial) || 1) + (Number(r.community) || 1);
+    return { p, d, score: p * d };
+}
+
+function generateRiskDistributionChart(project) {
+    const items = [];
+    const risks = project.customRisks || [];
+    if (risks.length === 0) return items;
+    const isOutdoor = project.environmentType === 'venkovní' || project.environmentType === 'vnější';
+
+    const bandCounts = { critical: 0, high: 0, medium: 0, low: 0 };
+    risks.forEach(r => {
+        const { score } = computeRiskScore(r, isOutdoor);
+        const band = toBand(score, SUBFACTOR_BANDS);
+        if (band) bandCounts[band.id] = (bandCounts[band.id] || 0) + 1;
+    });
+    const max = Math.max(bandCounts.critical, bandCounts.high, bandCounts.medium, bandCounts.low, 1);
+    const BAR_MAX = 30; // max počet bloků v baru
+
+    const bandOrder = [
+        { id: 'critical', color: 'B91C1C' },
+        { id: 'high',     color: 'D97706' },
+        { id: 'medium',   color: 'CA8A04' },
+        { id: 'low',      color: '16A34A' },
+    ];
+
+    const rows = bandOrder.map(b => {
+        const count = bandCounts[b.id];
+        const barLen = Math.max(count > 0 ? 1 : 0, Math.round((count / max) * BAR_MAX));
+        return new TableRow({
+            children: [
+                new TableCell({
+                    width: { size: 18, type: WidthType.PERCENTAGE },
+                    borders: noBorders(),
+                    verticalAlign: VerticalAlign.CENTER,
+                    children: [new Paragraph({
+                        children: [new TextRun({ text: BAND_COLORS[b.id].label, bold: true, size: 22, font: DOC_FONT })],
+                    })],
+                }),
+                new TableCell({
+                    width: { size: 74, type: WidthType.PERCENTAGE },
+                    borders: noBorders(),
+                    verticalAlign: VerticalAlign.CENTER,
+                    children: [new Paragraph({
+                        children: [new TextRun({
+                            text: '█'.repeat(barLen) || '·',
+                            color: b.color,
+                            size: 22,
+                            font: 'Consolas',
+                        })],
+                    })],
+                }),
+                new TableCell({
+                    width: { size: 8, type: WidthType.PERCENTAGE },
+                    borders: noBorders(),
+                    verticalAlign: VerticalAlign.CENTER,
+                    children: [new Paragraph({
+                        alignment: AlignmentType.RIGHT,
+                        children: [new TextRun({ text: String(count), bold: true, size: 22, font: DOC_FONT })],
+                    })],
+                }),
+            ],
+        });
+    });
+
+    items.push(new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        rows,
+    }));
+    items.push(emptyLine());
+    return items;
+}
+
 function generateRiskMatrix(project) {
     const items = [];
     const risks = project.customRisks || [];
@@ -353,34 +480,63 @@ function generateRiskMatrix(project) {
         return items;
     }
 
+    const isOutdoor = project.environmentType === 'venkovní' || project.environmentType === 'vnější';
     items.push(para('Hodnocení subfaktorů pravděpodobnosti (P) a dopadu (D) na škále 1–7.'));
     items.push(para('P = Dostupnost + Výskyt + Složitost (3–21)'));
-    items.push(para('D = Životy + Objekt + Finance + Společenství (4–28)'));
+    items.push(para(isOutdoor
+        ? 'D = Životy + Finance + Společenství (3–21) — u venkovních akcí je subfaktor „Technika/Objekt" vynechán.'
+        : 'D = Životy + Objekt + Finance + Společenství (4–28)'));
     items.push(para('Skóre = P × D'));
     items.push(emptyLine());
 
-    // Simple text-based table (DOCX tables are complex)
-    const sorted = [...risks].sort((a, b) => {
-        const scoreA = ((Number(a.availability)||1)+(Number(a.occurrence)||1)+(Number(a.complexity)||1)) * ((Number(a.lifeAndHealth)||1)+(Number(a.facility)||1)+(Number(a.financial)||1)+(Number(a.community)||1));
-        const scoreB = ((Number(b.availability)||1)+(Number(b.occurrence)||1)+(Number(b.complexity)||1)) * ((Number(b.lifeAndHealth)||1)+(Number(b.facility)||1)+(Number(b.financial)||1)+(Number(b.community)||1));
-        return scoreB - scoreA;
+    const sorted = [...risks]
+        .map(r => ({ r, ...computeRiskScore(r, isOutdoor) }))
+        .sort((a, b) => b.score - a.score);
+
+    const headerRow = new TableRow({
+        tableHeader: true,
+        height: { value: 400, rule: HeightRule.ATLEAST },
+        children: [
+            tableHeaderCell('#', 6),
+            tableHeaderCell('Riziko', 44, AlignmentType.LEFT),
+            tableHeaderCell('P', 8),
+            tableHeaderCell('D', 8),
+            tableHeaderCell('Skóre', 10),
+            tableHeaderCell('Pásmo', 24),
+        ],
     });
 
-    sorted.forEach((r, i) => {
-        const p = (Number(r.availability)||1)+(Number(r.occurrence)||1)+(Number(r.complexity)||1);
-        const d = (Number(r.lifeAndHealth)||1)+(Number(r.facility)||1)+(Number(r.financial)||1)+(Number(r.community)||1);
-        const score = p * d;
+    const dataRows = sorted.map(({ r, p, d, score }, i) => {
         const band = toBand(score, SUBFACTOR_BANDS);
-        items.push(para(`${i + 1}. ${r.name}`));
-        items.push(new Paragraph({
-            children: [new TextRun({
-                text: `   P: ${p} (D:${r.availability||1} V:${r.occurrence||1} S:${r.complexity||1})  ×  D: ${d} (Ž:${r.lifeAndHealth||1} O:${r.facility||1} F:${r.financial||1} Sp:${r.community||1})  =  ${score} [${band?.label || '?'}]`,
-                size: 20,
-                color: '555555',
-            })],
-            spacing: { after: 80 },
-        }));
+        const zebra = i % 2 === 1;
+        const dataCell = (text, opts = {}) => {
+            const base = {
+                margins: { top: 60, bottom: 60, left: 100, right: 100 },
+                verticalAlign: VerticalAlign.CENTER,
+                children: [new Paragraph({
+                    alignment: opts.alignment || AlignmentType.LEFT,
+                    children: [new TextRun({ text, size: 20, bold: !!opts.bold, font: DOC_FONT })],
+                })],
+            };
+            if (zebra) base.shading = { type: ShadingType.CLEAR, fill: 'F8FAFC' };
+            return new TableCell(base);
+        };
+        return new TableRow({
+            children: [
+                dataCell(String(i + 1), { alignment: AlignmentType.CENTER }),
+                dataCell(r.name),
+                dataCell(String(p), { alignment: AlignmentType.CENTER }),
+                dataCell(String(d), { alignment: AlignmentType.CENTER }),
+                dataCell(String(score), { alignment: AlignmentType.CENTER, bold: true }),
+                tableBandCell(band),
+            ],
+        });
     });
+
+    items.push(new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        rows: [headerRow, ...dataRows],
+    }));
 
     return items;
 }
@@ -879,10 +1035,40 @@ function generateKpPcrHzs(project) {
         { key: 'cooperationIZS', label: 'Spolupráce s IZS' },
     ];
 
-    fields.forEach(f => {
-        const val = pcrHzs[f.key] || '';
-        items.push(para(`${f.label}: ${val || '[doplnit]'}`));
+    const rows = fields.map((f, i) => {
+        const val = (pcrHzs[f.key] || '').toString();
+        const zebra = i % 2 === 1;
+        const cellBase = zebra ? { shading: { type: ShadingType.CLEAR, fill: 'F8FAFC' } } : {};
+        return new TableRow({
+            children: [
+                new TableCell({
+                    width: { size: 38, type: WidthType.PERCENTAGE },
+                    margins: { top: 60, bottom: 60, left: 100, right: 100 },
+                    verticalAlign: VerticalAlign.CENTER,
+                    ...cellBase,
+                    children: [new Paragraph({
+                        children: [new TextRun({ text: f.label, bold: true, size: 20, font: DOC_FONT })],
+                    })],
+                }),
+                new TableCell({
+                    width: { size: 62, type: WidthType.PERCENTAGE },
+                    margins: { top: 60, bottom: 60, left: 100, right: 100 },
+                    verticalAlign: VerticalAlign.CENTER,
+                    ...cellBase,
+                    children: [new Paragraph({
+                        children: val
+                            ? [new TextRun({ text: val, size: 20, font: DOC_FONT })]
+                            : [new TextRun({ text: '[doplnit]', italics: true, color: '999999', size: 20, font: DOC_FONT })],
+                    })],
+                }),
+            ],
+        });
     });
+
+    items.push(new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        rows,
+    }));
 
     return items;
 }
@@ -937,18 +1123,18 @@ const generators = {
 export async function generateDocument(template, project) {
     const children = [];
 
-    // Titulní strana
+    // Titulní strana (obsahuje vlastní page-break na konci)
     children.push(...titlePage(template, project));
 
-    // Obsah
+    // Obsah (obsahuje vlastní page-break na konci)
     children.push(...tableOfContents(template));
 
-    // Kapitoly
-    for (const chapter of template.chapters) {
+    // Kapitoly — každá kapitola začíná na nové stránce
+    template.chapters.forEach((chapter, idx) => {
+        if (idx > 0) children.push(pageBreak());
         children.push(heading1(`${chapter.number}. ${chapter.title}`));
 
         if (chapter.subchapters) {
-            // Kapitola s podkapitolami
             for (const sub of chapter.subchapters) {
                 children.push(heading2(`${sub.number} ${sub.title}`));
                 const gen = generators[sub.dataKey] || generators.manual;
@@ -958,22 +1144,63 @@ export async function generateDocument(template, project) {
             const gen = generators[chapter.dataKey] || generators.manual;
             children.push(...gen(project));
         }
+    });
 
-        children.push(emptyLine());
-    }
+    const eventLabel = project.officialName || project.name || '';
+    const docTitle = template.title || '';
 
     const docFile = new Document({
+        creator: project.author || 'Event Security Planner',
+        title: docTitle,
         styles: {
+            default: {
+                document: { run: { font: DOC_FONT, size: 22 } },
+            },
             paragraphStyles: [
                 {
-                    id: "Normal",
-                    name: "Normal",
-                    run: { font: "Calibri", size: 22 },
-                    paragraph: { spacing: { line: 276 } },
+                    id: 'Normal',
+                    name: 'Normal',
+                    run: { font: DOC_FONT, size: 22 },
+                    paragraph: { spacing: { line: 300 } },
                 },
             ],
         },
-        sections: [{ children }],
+        sections: [{
+            properties: {
+                page: {
+                    size: { width: 11906, height: 16838, orientation: 'portrait' }, // A4 v twips
+                    margin: { top: 1134, right: 1134, bottom: 1134, left: 1134, header: 567, footer: 567 },
+                },
+            },
+            headers: {
+                default: new Header({
+                    children: [new Paragraph({
+                        alignment: AlignmentType.RIGHT,
+                        border: {
+                            bottom: { color: 'CBD5E1', space: 4, style: BorderStyle.SINGLE, size: 6 },
+                        },
+                        children: [
+                            new TextRun({ text: docTitle, size: 18, color: '64748B', font: DOC_FONT }),
+                            ...(eventLabel ? [new TextRun({ text: '  ·  ', size: 18, color: 'CBD5E1', font: DOC_FONT }), new TextRun({ text: eventLabel, size: 18, color: '334155', bold: true, font: DOC_FONT })] : []),
+                        ],
+                    })],
+                }),
+            },
+            footers: {
+                default: new Footer({
+                    children: [new Paragraph({
+                        alignment: AlignmentType.CENTER,
+                        children: [
+                            new TextRun({ text: 'Strana ', size: 18, color: '64748B', font: DOC_FONT }),
+                            new TextRun({ children: [PageNumber.CURRENT], size: 18, color: '64748B', font: DOC_FONT }),
+                            new TextRun({ text: ' z ', size: 18, color: '64748B', font: DOC_FONT }),
+                            new TextRun({ children: [PageNumber.TOTAL_PAGES], size: 18, color: '64748B', font: DOC_FONT }),
+                        ],
+                    })],
+                }),
+            },
+            children,
+        }],
     });
 
     const blob = await Packer.toBlob(docFile);

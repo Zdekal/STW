@@ -343,7 +343,17 @@ function PlanDocumentA4() {
 
     return (
         <Box className="document-container" sx={{ p: 3, bgcolor: '#eef2f6', '@media print': { p: 0, bgcolor: 'transparent' } }}>
-            <style type="text/css">{`@media print { body * { visibility: hidden; } .printable-area, .printable-area * { visibility: visible; } .printable-area { position: absolute; left: 0; top: 0; width: 100%;} .no-print { display: none !important; } }`}</style>
+            <style type="text/css">{`
+                @page { size: A4; margin: 1.5cm; }
+                @media print {
+                    body * { visibility: hidden; }
+                    .printable-area, .printable-area * { visibility: visible; }
+                    .printable-area { position: absolute; left: 0; top: 0; width: 100%; }
+                    .no-print { display: none !important; }
+                    h1, h2, h3 { page-break-after: avoid; }
+                    table, figure, .avoid-break { page-break-inside: avoid; }
+                }
+            `}</style>
             <Box className="no-print" sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
                 <Typography variant="h4" gutterBottom>Náhled bezpečnostního plánu</Typography>
                 <Box><Button variant="outlined" startIcon={<Print />} onClick={() => window.print()} sx={{ mr: 2 }}>Vytisknout / PDF</Button>
