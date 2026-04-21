@@ -44,6 +44,22 @@ const categoryIcons = {
     Groups: <Groups />,
 };
 
+// Doplňující otázky z wizardu – zde editovatelné i u starých projektů.
+const ACCESS_OPTIONS = [
+    { key: 'singleEntry', label: 'Jeden hlavní vstup' },
+    { key: 'multipleEntries', label: 'Více vstupů / východů' },
+    { key: 'turnstiles', label: 'Turnikety / počítání osob' },
+    { key: 'bagCheck', label: 'Kontrola zavazadel' },
+    { key: 'ticketing', label: 'Vstupenky / registrace / akreditace' },
+];
+
+const DURATION_OPTIONS = [
+    { value: 'jednodenni', label: 'Jednodenní' },
+    { value: 'vikend', label: 'Víkend (2–3 dny)' },
+    { value: 'tyden', label: 'Týden či déle' },
+    { value: 'etapova', label: 'Etapová (přesuny mezi lokalitami)' },
+];
+
 // Synchronní záloha rozpracovaných změn do localStorage.
 // Přežije refresh stránky i v případě, že debouncovaný autosave do Firestore
 // ještě nestihl odeslat zápis (async setDoc prohlížeč při beforeunload nečeká).
@@ -168,6 +184,8 @@ function ProjectBasic() {
                         eventType: lp.eventType || '',
                         eventTypeOther: lp.eventTypeOther || '',
                         hasControlRoom: lp.hasControlRoom || false,
+                        duration: lp.duration || '',
+                        accessModel: lp.accessModel || {},
                         involvedTeams: lp.involvedTeams || {},
                         dates: lp.dates && lp.dates.length > 0 ? lp.dates : [{ date: '', location: '' }],
                         ownerId: lp.ownerId,
@@ -221,6 +239,8 @@ function ProjectBasic() {
                     eventType: data.eventType || '',
                     eventTypeOther: data.eventTypeOther || '',
                     hasControlRoom: data.hasControlRoom || false,
+                    duration: data.duration || '',
+                    accessModel: data.accessModel || {},
                     involvedTeams: data.involvedTeams || {},
                     dates: data.dates && data.dates.length > 0 ? data.dates : [{ date: '', location: '' }],
                     ownerId: data.ownerId,
@@ -426,6 +446,13 @@ function ProjectBasic() {
         updateFormData(prev => ({ ...prev, [name]: val }));
     };
 
+    const handleAccessModelToggle = (key) => {
+        updateFormData(prev => ({
+            ...prev,
+            accessModel: { ...(prev.accessModel || {}), [key]: !(prev.accessModel || {})[key] },
+        }));
+    };
+
     const handleTeamToggle = (teamName) => {
         updateFormData(prev => ({
             ...prev,
@@ -552,11 +579,45 @@ function ProjectBasic() {
                         />
                     )}
 
+                    <FormControl fullWidth variant="outlined">
+                        <InputLabel>Délka akce</InputLabel>
+                        <Select name="duration" value={formData?.duration || ''} onChange={handleInputChange} label="Délka akce">
+                            <MenuItem value=""><em>-- Vyberte --</em></MenuItem>
+                            {DURATION_OPTIONS.map(opt => (
+                                <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+
                     <Box className="md:col-span-2 mt-2">
                         <FormControlLabel
                             control={<Checkbox checked={formData?.hasControlRoom || false} onChange={handleInputChange} name="hasControlRoom" />}
                             label="Bude na akci Control Room / Velín v průběhu celé akce?"
                         />
+                    </Box>
+
+                    <Box className="md:col-span-2 mt-1">
+                        <Typography variant="body2" sx={{ fontWeight: 500, mb: 1 }}>
+                            Vstupy a kontrola přístupu
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                            Volba vstupů ovlivňuje úkoly v checklistu (turnikety, kontrola zavazadel, rozpočet personálu u vchodu atd.).
+                        </Typography>
+                        <FormGroup row>
+                            {ACCESS_OPTIONS.map(opt => (
+                                <FormControlLabel
+                                    key={opt.key}
+                                    control={
+                                        <Checkbox
+                                            checked={!!(formData?.accessModel || {})[opt.key]}
+                                            onChange={() => handleAccessModelToggle(opt.key)}
+                                        />
+                                    }
+                                    label={opt.label}
+                                    sx={{ mr: 3 }}
+                                />
+                            ))}
+                        </FormGroup>
                     </Box>
                 </div>
             </section>
