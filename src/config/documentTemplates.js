@@ -26,7 +26,11 @@
  * - 'kpCoordCenter'           → koordinační centra + FIXNÍ checklist vybavení
  * - 'kpCommProtocol'          → komunikační protokol (matice 2×2)
  * - 'kpPcrHzs'                → tabulka pro PČR a HZS
- * - 'manual'                  → ručně vyplní uživatel (ve Wordu)
+ * - 'kpOnepager'              → onepager pro KT (shrnutí na 1 stranu)
+ * - 'onepagerOrganizer'       → onepager pro pořadatele (info + harmonogram + úkoly + kontakty)
+ * - 'auditIntro'              → úvod pre-event auditu
+ * - 'auditChecklist'          → kontrolní body pro pre-event walk-through
+ * - 'manual'                  → ručně vyplní uživatel (v aplikaci nebo ve Wordu)
  */
 
 export const documentTemplates = {
@@ -82,6 +86,7 @@ export const documentTemplates = {
             { number: '3', title: 'Vymezení pojmů', dataKey: 'kpDefinitions', description: 'Definice: závažná situace, koordinační tým, koordinační centrum. (Fixní)' },
             { number: '4', title: 'Seznam potenciálních incidentů', dataKey: 'risks', description: 'Přehled identifikovaných rizik vyžadujících koordinaci.' },
             { number: '5', title: 'Koordinační tým', dataKey: 'kpTeamComposition', description: 'Složení KT: jméno, funkce na akci, role v KT, kontakty.' },
+            { number: '5a', title: 'Onepager pro koordinační tým', dataKey: 'kpOnepager', description: 'Stručné shrnutí na jednu stranu: tým, aktivace, kanály, incidenty.' },
             { number: '6', title: 'Úkoly členů koordinačního týmu', dataKey: 'kpRoleTasks', description: 'Konkrétní odpovědnosti a kroky pro každou pozici v KT.' },
             { number: '7', title: 'Aktivace koordinačního plánu', dataKey: 'kpActivation', description: 'Kdo a jak aktivuje, automatické vs. diskreční spouštěče.' },
             { number: '8', title: 'Fáze postupu a priority', dataKey: 'kpPhases', description: 'Fáze 1–4: od okamžité reakce po dlouhodobé řízení.' },
@@ -101,7 +106,44 @@ export const documentTemplates = {
                 ]
             },
         ]
-    }
+    },
+    onepager: {
+        id: 'onepager',
+        title: 'Onepager pro pořadatele',
+        subtitle: 'stručné shrnutí na 1–2 strany',
+        icon: 'ContactMail',
+        description: 'Rychlý přehled pro pořadatele: základní info, harmonogram, briefing, úkoly na pozici, vybavení a kontakty.',
+        color: '#0ea5e9',
+        chapters: [
+            { number: '1', title: 'Základní informace o akci', dataKey: 'basicInfo', description: 'Název, místo, datum, kapacita, organizátor.' },
+            { number: '2', title: 'Harmonogram', dataKey: 'onepagerOrganizer', description: 'Klíčové časy: příchod personálu, otevření, hlavní body, konec.', subKey: 'schedule' },
+            { number: '3', title: 'Briefing před akcí', dataKey: 'onepagerOrganizer', description: 'Kde, kdy, kdo a co se na briefingu probere.', subKey: 'briefing' },
+            { number: '4', title: 'Úkoly na pozici', dataKey: 'onepagerOrganizer', description: 'Konkrétní úkoly vybrané z checklistu a přiřazené k rolím.', subKey: 'positionTasks' },
+            { number: '5', title: 'Vybavení s sebou', dataKey: 'onepagerOrganizer', description: 'Co si pořadatel musí přinést (vysílačka, reflexní vesta, ID).', subKey: 'equipment' },
+            { number: '6', title: 'Hlavní kontakty', dataKey: 'onepagerOrganizer', description: 'Velín, security, zdravotníci, IZS – čísla vždy po ruce.', subKey: 'contacts' },
+            { number: '7', title: 'Hlavní postupy při incidentech', dataKey: 'onepagerOrganizer', description: 'Kartičky "Co dělat, když…" pro nejpravděpodobnější incidenty.', subKey: 'incidents' },
+        ],
+    },
+    audit: {
+        id: 'audit',
+        title: 'Pre-event audit / walk-through',
+        subtitle: 'kontrola ráno v den konání',
+        icon: 'Checklist',
+        description: 'Strukturovaný seznam pro ranní obchůzku areálu – co zkontrolovat, než se otevře.',
+        color: '#16a34a',
+        chapters: [
+            { number: '1', title: 'Základní informace', dataKey: 'basicInfo', description: 'Název akce, datum, odpovědná osoba za audit.' },
+            { number: '2', title: 'Úvod a použití', dataKey: 'auditIntro', description: 'Kdo, kdy a jak audit provádí. (Fixní metodický text)' },
+            { number: '3', title: 'Perimetr a přístupy', dataKey: 'auditChecklist', description: 'Oplocení, vstupy, východy, značení, zábrany.', subKey: 'perimeter' },
+            { number: '4', title: 'Evakuační cesty a zázemí', dataKey: 'auditChecklist', description: 'Únikové cesty průchodné, hasicí přístroje, AED.', subKey: 'safety' },
+            { number: '5', title: 'Technologie a napájení', dataKey: 'auditChecklist', description: 'Kamery, rádia, napájení, záložní zdroje, AV/IT.', subKey: 'tech' },
+            { number: '6', title: 'Pódium, stavby, konstrukce', dataKey: 'auditChecklist', description: 'Vizuální kontrola pódia, stanů, oplocení, pevnost spojů.', subKey: 'structures' },
+            { number: '7', title: 'Zdravotní a hygienické zázemí', dataKey: 'auditChecklist', description: 'Stanoviště ZZS, toalety, pitná voda, odpad.', subKey: 'medical' },
+            { number: '8', title: 'Personál a briefing', dataKey: 'auditChecklist', description: 'Kontrola rozpisu směn, vizuálu, kontaktních listů.', subKey: 'staff' },
+            { number: '9', title: 'Venkovní podmínky', dataKey: 'auditChecklist', description: 'Počasí, vítr, viditelnost, stav terénu.', subKey: 'outdoor' },
+            { number: '10', title: 'Zápis a nalezené nedostatky', dataKey: 'manual', description: 'Ručně: co bylo nalezeno, kdo řeší, do kdy.' },
+        ],
+    },
 };
 
 /**

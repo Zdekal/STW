@@ -1099,6 +1099,266 @@ function generateRisksSimple(project) {
     return items;
 }
 
+// ── Onepager pro koordinační tým (shrnutí na 1 stranu) ─────────────────
+
+function generateKpOnepager(project) {
+    const items = [];
+    const staff = project.crisisStaffPlan?.staffMembers || [];
+    const risks = project.customRisks || [];
+    const triggers = project.crisisStaffPlan?.incidentTriggers || {};
+    const activationMethod = project.crisisStaffPlan?.activationMethod;
+    const activationAuthority = project.crisisStaffPlan?.activationAuthority;
+
+    items.push(para('Jednostranný přehled pro každého člena koordinačního týmu — vytisknout, laminovat, nosit.', { italics: true, color: '475569' }));
+    items.push(emptyLine());
+
+    // KT složení kompaktně
+    items.push(heading3('Koordinační tým'));
+    if (staff.length > 0) {
+        staff.forEach(m => {
+            const role = m.ktRole || m.role || '—';
+            const name = m.name || '—';
+            const phone = m.crisisPhone || m.phone || '—';
+            items.push(bulletItem(`${role}: ${name} — ${phone}`));
+        });
+    } else {
+        items.push(placeholderPara('Doplňte členy koordinačního týmu v sekci Koordinační plán'));
+    }
+    items.push(emptyLine());
+
+    // Aktivace
+    items.push(heading3('Aktivace'));
+    if (activationMethod) items.push(para(`Způsob svolání: ${activationMethod}`));
+    if (activationAuthority) items.push(para(`Kdo může aktivovat: ${activationAuthority}`));
+    const autoTriggers = (triggers.automatic || []).map(id => risks.find(r => r.id === id)?.name).filter(Boolean);
+    if (autoTriggers.length > 0) {
+        items.push(para('Automaticky aktivuje:', { bold: true }));
+        autoTriggers.forEach(n => items.push(bulletItem(n)));
+    }
+    items.push(emptyLine());
+
+    // Hlavní incidenty (top 5 podle skóre nebo prvních 5)
+    items.push(heading3('Hlavní incidenty'));
+    const topRisks = risks.slice(0, 5);
+    if (topRisks.length > 0) {
+        topRisks.forEach(r => items.push(bulletItem(r.name)));
+    } else {
+        items.push(placeholderPara('Přidejte rizika'));
+    }
+    items.push(emptyLine());
+
+    // Kanály
+    items.push(heading3('Klíčové kanály'));
+    items.push(bulletItem('Rádiová síť — hlavní / záložní kanál (doplnit)'));
+    items.push(bulletItem('Hromadná WhatsApp / Signal skupina KT'));
+    items.push(bulletItem('IZS — 112 (všeobecná), 150 HZS, 155 ZZS, 158 PČR'));
+
+    return items;
+}
+
+// ── Onepager pro pořadatele ────────────────────────────────────────────
+
+function generateOnepagerOrganizer(project, ctx = {}) {
+    const sub = ctx.subKey;
+    const userText = project?.manualChapters?.[ctx.key];
+    if (userText && userText.trim()) {
+        return userText.split(/\n{2,}/).map(b => para(b.trim()));
+    }
+
+    const items = [];
+    const phases = project?.crisisStaffPlan?.phases;
+
+    switch (sub) {
+        case 'schedule': {
+            items.push(para('Klíčové časy v den akce (doplňte konkrétní hodiny):', { italics: true }));
+            items.push(bulletItem('Příchod personálu a rozmístění: __:__'));
+            items.push(bulletItem('Briefing pořadatelů: __:__'));
+            items.push(bulletItem('Otevření areálu / vstupů: __:__'));
+            items.push(bulletItem('Hlavní program (začátek): __:__'));
+            items.push(bulletItem('Konec akce / uzavření: __:__'));
+            items.push(bulletItem('Debriefing a vyklizení: __:__'));
+            break;
+        }
+        case 'briefing': {
+            items.push(bulletItem('Kde: (doplnit místo)'));
+            items.push(bulletItem('Kdy: (doplnit čas, typicky 60–90 min před otevřením)'));
+            items.push(bulletItem('Kdo vede: (jméno hlavního koordinátora)'));
+            items.push(para('Obsah briefingu:', { bold: true }));
+            items.push(bulletItem('Přehled akce, klíčové časy, kapacita'));
+            items.push(bulletItem('Rozmístění pozic a rotace'));
+            items.push(bulletItem('Komunikační kanály a rádiová pravidla'));
+            items.push(bulletItem('Hlavní rizika a postupy při incidentech'));
+            items.push(bulletItem('Koho kontaktovat v nouzi (velín, security, zdravotník)'));
+            items.push(bulletItem('Kontrola rozpoznávacích prvků (vesty, visačky)'));
+            break;
+        }
+        case 'positionTasks': {
+            // Vybereme top úkoly z checklistu fáze "Těsně před akcí" a "Realizační fáze"
+            const taskState = project.checklistTaskState || {};
+            const assigned = Object.entries(taskState)
+                .filter(([, s]) => s.assignee)
+                .slice(0, 20);
+            if (assigned.length > 0) {
+                items.push(para('Úkoly přiřazené konkrétním osobám z checklistu:', { italics: true }));
+                assigned.forEach(([id, s]) => {
+                    const when = s.dueDate ? ` (do ${s.dueDate})` : '';
+                    items.push(bulletItem(`${s.assignee}: ${id}${when}`));
+                });
+            } else {
+                items.push(placeholderPara('Přiřaďte úkoly konkrétním osobám v sekci Checklist — objeví se tady.'));
+            }
+            break;
+        }
+        case 'equipment': {
+            items.push(para('Základní vybavení pořadatele:', { italics: true }));
+            items.push(bulletItem('Reflexní vesta / tričko s označením funkce'));
+            items.push(bulletItem('Visačka s fotografií a kontaktem na vedoucího'));
+            items.push(bulletItem('Nabitý telefon + nouzový kontakt v paměti'));
+            items.push(bulletItem('Vysílačka + záložní baterie (pokud je přidělena)'));
+            items.push(bulletItem('Svítilna (pro večerní a noční akce)'));
+            items.push(bulletItem('Voda, jídlo, sluneční ochrana / pláštěnka podle počasí'));
+            items.push(bulletItem('Tento onepager (vytištěný / laminovaný)'));
+            break;
+        }
+        case 'contacts': {
+            const staff = project.crisisStaffPlan?.staffMembers || [];
+            items.push(para('Klíčové kontakty (pořadí priority):', { italics: true }));
+            const keyRoles = ['Krizový manažer', 'Vedoucí akce', 'Šéf ostrahy', 'Velín'];
+            keyRoles.forEach(roleHint => {
+                const m = staff.find(s => (s.ktRole || s.role || '').toLowerCase().includes(roleHint.toLowerCase()));
+                if (m) items.push(bulletItem(`${roleHint}: ${m.name || '—'} — ${m.crisisPhone || m.phone || '—'}`));
+                else items.push(bulletItem(`${roleHint}: (doplnit jméno a telefon)`));
+            });
+            items.push(bulletItem('IZS: 112  |  HZS: 150  |  ZZS: 155  |  PČR: 158'));
+            items.push(bulletItem('Zdravotník na místě: (doplnit jméno a kanál)'));
+            break;
+        }
+        case 'incidents': {
+            items.push(para('Kartičky „Co dělat, když…":', { italics: true }));
+            items.push(emptyLine());
+            items.push(para('ZTRACENÉ DÍTĚ', { bold: true }));
+            items.push(bulletItem('1. Informuj velín (popis, místo, čas)'));
+            items.push(bulletItem('2. Dítě NEOPOUŠTĚJ, pokud ho máš u sebe'));
+            items.push(bulletItem('3. Nevydávej dítě bez ověření rodiče'));
+            items.push(emptyLine());
+            items.push(para('ZDRAVOTNÍ PŘÍHODA', { bold: true }));
+            items.push(bulletItem('1. Zavolej zdravotníka na rádiu'));
+            items.push(bulletItem('2. Zajisti prostor kolem postiženého'));
+            items.push(bulletItem('3. Neopouštěj pacienta do příchodu zdravotníka'));
+            items.push(emptyLine());
+            items.push(para('PODEZŘELÝ PŘEDMĚT', { bold: true }));
+            items.push(bulletItem('1. NESAHAT, nemanipulovat, nepoužívat rádio/telefon vedle něj'));
+            items.push(bulletItem('2. Vykliď okolí 50 m minimálně'));
+            items.push(bulletItem('3. Ohlas velínu, počkej na security / PČR'));
+            items.push(emptyLine());
+            items.push(para('POŽÁR', { bold: true }));
+            items.push(bulletItem('1. Ohlas velínu a na 150'));
+            items.push(bulletItem('2. Začni evakuovat nejbližší osoby směrem od ohně'));
+            items.push(bulletItem('3. Pokud je vhodný přístroj a oheň malý — hasit'));
+            items.push(emptyLine());
+            items.push(para('AGRESIVNÍ / OPILÁ OSOBA', { bold: true }));
+            items.push(bulletItem('1. Neřeš sám — zavolej security'));
+            items.push(bulletItem('2. Drž odstup, deeskaluj, nekřič'));
+            items.push(bulletItem('3. Přivolej svědky a nahrávej (v rámci zákona)'));
+            break;
+        }
+        default:
+            items.push(placeholderPara('Doplňte obsah kapitoly.'));
+    }
+    return items;
+}
+
+// ── Pre-event audit (walk-through) ─────────────────────────────────────
+
+function generateAuditIntro() {
+    return [
+        para('Tento audit se provádí ráno v den akce, před otevřením areálu veřejnosti. Cílem je ověřit, že se přes noc nezměnilo nic, co by ohrozilo bezpečnost návštěvníků.'),
+        emptyLine(),
+        heading3('Pravidla'),
+        bulletItem('Audit provádí pověřená osoba (typicky bezpečnostní manažer nebo vedoucí ostrahy) společně se zástupcem pořadatele.'),
+        bulletItem('Každý bod se zaškrtne, nebo se poznamená nalezená závada a termín opravy.'),
+        bulletItem('Závady kategorie A (kritické) znemožňují otevření — musí být řešeny před začátkem.'),
+        bulletItem('Vyplněný audit se fotí / scannuje a archivuje po akci.'),
+        emptyLine(),
+        para('Jméno auditora: ______________________________    Datum: __________    Čas zahájení: __________', { bold: true }),
+    ];
+}
+
+const AUDIT_CHECKLISTS = {
+    perimeter: [
+        'Obvod areálu / oplocení je kompletní a neporušené.',
+        'Všechny hlavní vstupy jsou uzamčené / hlídané a funkční.',
+        'Nouzové východy jsou průchodné a odemčené zevnitř.',
+        'Zábrany proti nájezdu vozidel jsou na místě a ukotvené.',
+        'Značení k vstupům a cedulky s provozním řádem jsou čitelné.',
+        'Parkoviště je označené a nemá v sobě cizí předměty.',
+    ],
+    safety: [
+        'Únikové cesty jsou průchodné a bez překážek.',
+        'Nouzové osvětlení funguje.',
+        'Hasicí přístroje jsou na místech a v revizním termínu.',
+        'AED je na určeném místě, nabitý.',
+        'Shromaždiště pro evakuaci je volné a přístupné.',
+        'Plán evakuace je viditelně vyvěšený u vchodů.',
+    ],
+    tech: [
+        'Kamery CCTV jsou funkční a zapisují — náhodný test.',
+        'Rádiová síť funguje na hlavním i záložním kanálu.',
+        'Velín má napájení a záložní UPS / dieselagregát je v pořádku.',
+        'AV / ozvučení / mikrofony — test hlavního + záložního.',
+        'Internet a mobilní signál — kontrola v hlavních zónách.',
+        'Systém kontroly vstupenek / akreditací funguje, offline režim otestován.',
+    ],
+    structures: [
+        'Pódium / stage — vizuální kontrola spojů, ukotvení, zátěž.',
+        'Stany a přístřešky — kotvení, odtoky pro srážky, ztužení při větru.',
+        'Tribuny / lešení — uzamčené schody, zábradlí, kapacitní limity.',
+        'Kabeláž — nikde nevede přes únikové cesty bez ochrany.',
+        'Oplocenky a bariéry — propojené, bez mezer, ukotvené.',
+    ],
+    medical: [
+        'Stanoviště ZZS je vybavené a obsazené.',
+        'Přístupová cesta pro sanitku je volná.',
+        'Toalety — funkční, čisté, dostatek zásob.',
+        'Pitná voda — dostupnost a označení.',
+        'Odpadové nádoby — rozmístěné a prázdné.',
+        'Stanoviště hydratace / stínění (pro horké počasí).',
+    ],
+    staff: [
+        'Rozpis směn je aktuální a všichni vědí svou pozici.',
+        'Všichni v rozpoznávacím oděvu / visačce.',
+        'Každý má funkční prostředek komunikace (rádio/telefon).',
+        'Briefing proběhl a klíčové body jsou pochopeny.',
+        'Kontaktovník je u každé pozice (tištěný + digitální).',
+    ],
+    outdoor: [
+        'Aktuální předpověď počasí — zkontrolovaná na následujících 6–12 h.',
+        'Rychlost větru v limitech pro stany a pódium.',
+        'Stav terénu — bez kluzkých nebo zablácených míst.',
+        'Viditelnost a osvětlení pro večerní / noční fázi.',
+        'Postup při zhoršení počasí je komunikován (kdo rozhoduje, jaké limity).',
+    ],
+};
+
+function generateAuditChecklist(project, ctx = {}) {
+    const sub = ctx.subKey;
+    const items = AUDIT_CHECKLISTS[sub];
+    if (!items) return [placeholderPara('Doplňte kontrolní body.')];
+    const out = [
+        para('Zaškrtni ✓ nebo doplň závadu a termín opravy:', { italics: true, color: '475569' }),
+        emptyLine(),
+    ];
+    items.forEach(t => {
+        out.push(new Paragraph({
+            children: [new TextRun({ text: `☐  ${t}`, font: DOC_FONT })],
+            spacing: { after: 80 },
+        }));
+    });
+    out.push(emptyLine());
+    out.push(placeholderPara('Poznámky k této sekci:'));
+    return out;
+}
+
 // ── Mapování dataKey → generátor ────────────────────────────────────────
 
 const generators = {
@@ -1125,8 +1385,76 @@ const generators = {
     kpCoordCenter: generateKpCoordCenter,
     kpCommProtocol: generateKpCommProtocol,
     kpPcrHzs: generateKpPcrHzs,
-    manual: (project) => [placeholderPara('Tuto kapitolu doplňte ručně ve staženém dokumentu.')],
+    kpOnepager: generateKpOnepager,
+    onepagerOrganizer: (project, ctx) => generateOnepagerOrganizer(project, ctx),
+    auditIntro: () => generateAuditIntro(),
+    auditChecklist: (project, ctx) => generateAuditChecklist(project, ctx),
+    manual: (project, ctx) => generateManualChapter(project, ctx),
 };
+
+// ── Scaffolding ručních kapitol ─────────────────────────────────────────
+// Klíč = `${template.id}/${chapter.number}`. Pokud klíč neexistuje, použije se
+// výchozí text. Pokud má uživatel v `project.manualChapters[key]` vlastní
+// hodnotu (z inline editoru), použije se místo otázek.
+const MANUAL_SCAFFOLDS = {
+    // Bezpečnostní plán
+    'plan/2.2': {
+        intro: 'Doporučení pro personál, úsekáře, stewardy a pořadatele na jednotlivých pozicích.',
+        questions: [
+            'Jaké konkrétní pozice / úseky potřebují vlastní instrukce?',
+            'Jaký je dress code a rozpoznávací prvek personálu?',
+            'Jaká je hlavní komunikační cesta mezi pozicí a velínem?',
+            'Co dělat v situaci, kterou pozice nezvládne sama (eskalační kroky)?',
+            'Povinné kontroly před zahájením směny (vybavení, zdraví, briefing).',
+        ],
+    },
+    'plan/2.3': {
+        intro: 'Ostatní doporučení, která se nevešla do předchozích sekcí.',
+        questions: [
+            'Doporučení pro návštěvníky (návštěvní řád, zakázané předměty).',
+            'Doporučení pro dodavatele a externisty (přístup, parkování, vjezdy).',
+            'Doporučení pro média a veřejnost (prostor pro novináře, foto zóny).',
+            'Postupy pro zvláštní skupiny (děti, hendikepovaní, VIP).',
+        ],
+    },
+    // Koordinační plán — přílohy
+    'koordinace/13.5': {
+        intro: 'Mapové přílohy lokality s vyznačenými riziky a zónami.',
+        questions: [
+            'Celkový situační plán areálu (hlavní body, vstupy, evakuační směry).',
+            'Mapa kritických míst (hrdla, riziko tlačenice, hořlavé materiály).',
+            'Mapa rozmístění zdravotnické služby a AED.',
+            'Mapa rozmístění security a komunikačních bodů.',
+            'Mapa přístupových cest pro IZS (PČR, HZS, ZZS).',
+        ],
+    },
+};
+
+function generateManualChapter(project, ctx = {}) {
+    const key = ctx.key || '';
+    const scaffold = MANUAL_SCAFFOLDS[key];
+
+    // Pokud má uživatel uloženou ruční hodnotu (z inline editoru), použít ji.
+    const userText = project?.manualChapters?.[key];
+    if (userText && userText.trim()) {
+        return userText
+            .split(/\n{2,}/)
+            .map(block => para(block.trim()));
+    }
+
+    if (!scaffold) {
+        return [placeholderPara('Tuto kapitolu doplňte ručně ve staženém dokumentu (nebo v aplikaci v sekci Ruční kapitoly).')];
+    }
+
+    const items = [];
+    if (scaffold.intro) items.push(para(scaffold.intro, { italics: true, color: '475569' }));
+    items.push(emptyLine());
+    items.push(para('Pro vyplnění této kapitoly odpovězte na následující otázky:', { bold: true }));
+    scaffold.questions.forEach(q => items.push(bulletItem(q)));
+    items.push(emptyLine());
+    items.push(placeholderPara('Vaše odpověď / doplnění:'));
+    return items;
+}
 
 // ── Hlavní generátor ────────────────────────────────────────────────────
 
@@ -1153,11 +1481,13 @@ export async function generateDocument(template, project) {
             for (const sub of chapter.subchapters) {
                 children.push(heading2(`${sub.number} ${sub.title}`));
                 const gen = generators[sub.dataKey] || generators.manual;
-                children.push(...gen(project));
+                const ctx = { key: `${template.id}/${sub.number}`, title: sub.title, template };
+                children.push(...gen(project, ctx));
             }
         } else {
             const gen = generators[chapter.dataKey] || generators.manual;
-            children.push(...gen(project));
+            const ctx = { key: `${template.id}/${chapter.number}`, title: chapter.title, template };
+            children.push(...gen(project, ctx));
         }
     });
 
@@ -1355,9 +1685,30 @@ export function getChapterStatuses(template, project) {
                 status = Object.values(info).some(v => v && v.trim()) ? 'partial' : 'empty';
                 break;
             }
-            case 'manual':
-                status = 'manual';
+            case 'kpOnepager':
+                status = (project.crisisStaffPlan?.staffMembers || []).some(m => m.name) ? 'filled' : 'partial';
                 break;
+            case 'auditIntro':
+                status = 'filled'; // fixní text
+                break;
+            case 'auditChecklist':
+                status = 'filled'; // fixní checklist, ručně se zaškrtává v PDF
+                break;
+            case 'onepagerOrganizer': {
+                const key = `${template.id}/${ch.number}`;
+                const v = project?.manualChapters?.[key];
+                if (v && v.trim()) { status = 'filled'; break; }
+                // fixní části (equipment, contacts, briefing, incidents) jsou filled, schedule/positionTasks jsou partial
+                if (ch.subKey === 'schedule' || ch.subKey === 'positionTasks') status = 'partial';
+                else status = 'filled';
+                break;
+            }
+            case 'manual': {
+                const key = `${template.id}/${ch.number}`;
+                const v = project?.manualChapters?.[key];
+                status = v && v.trim() ? 'filled' : 'manual';
+                break;
+            }
             default:
                 status = 'empty';
         }

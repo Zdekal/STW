@@ -15,7 +15,7 @@ import {
     CheckBoxOutlineBlank, CheckBox as CheckBoxIcon,
     LinkOutlined, ContactPhone, AssignmentInd, Checklist, Description,
 } from '@mui/icons-material';
-import { getMeasuresForEventType } from '../../config/cyclingRaceMeasures';
+import { getMeasuresForEventType } from '../../config/eventMeasuresCatalogs';
 import { measureIntegrations } from '../../config/measureIntegrations';
 
 /* ============================================================================ */

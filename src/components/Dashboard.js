@@ -126,6 +126,9 @@ export default function Dashboard() {
         audienceSize: wizardData.audienceSize || 0,
         environmentType: wizardData.environmentType || "",
         eventType: wizardData.eventType || "",
+        duration: wizardData.duration || "",
+        hasControlRoom: !!wizardData.hasControlRoom,
+        accessModel: wizardData.accessModel || {},
         selectedVulnerabilities: wizardData.selectedVulnerabilities || [],
         meta: {},
       };
